@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# 
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{79F33337-17FD-4766-AADF-BCEDC9CDF265}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SoundboardMixer.App", "src\SoundboardMixer.App\SoundboardMixer.App.csproj", "{68AEF758-C100-4767-809F-F8418FC31A04}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{68AEF758-C100-4767-809F-F8418FC31A04}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{68AEF758-C100-4767-809F-F8418FC31A04}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{68AEF758-C100-4767-809F-F8418FC31A04}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{68AEF758-C100-4767-809F-F8418FC31A04}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{68AEF758-C100-4767-809F-F8418FC31A04} = {79F33337-17FD-4766-AADF-BCEDC9CDF265}
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,245 @@
+<Window x:Class="SoundboardMixer.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Soundboard Mixer"
+        Width="1180"
+        Height="760"
+        MinWidth="1020"
+        MinHeight="680">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="220" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                Padding="12"
+                BorderBrush="#FFBDBDBD"
+                BorderThickness="1"
+                CornerRadius="4">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0"
+                            Margin="0,0,12,0">
+                    <TextBlock Margin="0,0,0,4"
+                               FontWeight="SemiBold"
+                               Text="Microphone Input" />
+                    <ComboBox ItemsSource="{Binding MicrophoneDevices}"
+                              DisplayMemberPath="DisplayName"
+                              SelectedItem="{Binding SelectedMicrophone}"
+                              MinWidth="320" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1"
+                            Margin="0,0,12,0">
+                    <TextBlock Margin="0,0,0,4"
+                               FontWeight="SemiBold"
+                               Text="Playback Output" />
+                    <ComboBox ItemsSource="{Binding OutputDevices}"
+                              DisplayMemberPath="DisplayName"
+                              SelectedItem="{Binding SelectedOutput}"
+                              MinWidth="320" />
+                </StackPanel>
+
+                <Button Grid.Column="2"
+                        Margin="0,20,12,0"
+                        Padding="14,6"
+                        Content="Refresh Devices"
+                        Command="{Binding RefreshDevicesCommand}" />
+
+                <Button Grid.Column="3"
+                        Margin="0,20,0,0"
+                        Padding="14,6"
+                        Content="Restart Audio"
+                        Command="{Binding RestartAudioCommand}" />
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1"
+                Margin="0,10,0,10"
+                Padding="10"
+                Background="#FFF5F5F5"
+                BorderBrush="#FFD5D5D5"
+                BorderThickness="1"
+                CornerRadius="4">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock FontWeight="SemiBold"
+                           Text="Engine Status:" />
+                <TextBlock Margin="8,0,0,0"
+                           Text="{Binding EngineStatus}" />
+            </StackPanel>
+        </Border>
+
+        <GroupBox Grid.Row="2"
+                  Header="Clips"
+                  Padding="8">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top"
+                            Margin="0,0,0,8"
+                            Orientation="Horizontal">
+                    <Button Margin="0,0,8,0"
+                            Padding="14,6"
+                            Content="Add Clips"
+                            Command="{Binding AddClipsCommand}" />
+                    <Button Margin="0,0,8,0"
+                            Padding="14,6"
+                            Content="Play Selected"
+                            Command="{Binding PlaySelectedClipCommand}" />
+                    <Button Margin="0,0,8,0"
+                            Padding="14,6"
+                            Content="Remove Selected"
+                            Command="{Binding RemoveSelectedClipCommand}" />
+                </StackPanel>
+
+                <DataGrid ItemsSource="{Binding Clips}"
+                          SelectedItem="{Binding SelectedClip}"
+                          AutoGenerateColumns="False"
+                          CanUserAddRows="False"
+                          CanUserDeleteRows="False"
+                          HeadersVisibility="Column"
+                          IsReadOnly="False"
+                          SelectionMode="Single">
+                    <DataGrid.RowStyle>
+                        <Style TargetType="DataGridRow">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsAvailable}"
+                                             Value="False">
+                                    <Setter Property="Background"
+                                            Value="#FFFBE4E4" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.RowStyle>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Label"
+                                            Binding="{Binding DisplayName, UpdateSourceTrigger=LostFocus}"
+                                            Width="160" />
+                        <DataGridTextColumn Header="Source File"
+                                            Binding="{Binding SourcePath}"
+                                            IsReadOnly="True"
+                                            Width="*" />
+                        <DataGridTextColumn Header="File Status"
+                                            Binding="{Binding AvailabilityText}"
+                                            IsReadOnly="True"
+                                            Width="140" />
+                        <DataGridTextColumn Header="Hotkey"
+                                            Binding="{Binding HotkeyText, UpdateSourceTrigger=LostFocus}"
+                                            Width="120" />
+                        <DataGridTextColumn Header="Hotkey Status"
+                                            Binding="{Binding HotkeyStatus}"
+                                            IsReadOnly="True"
+                                            Width="150" />
+                        <DataGridTemplateColumn Header="Play"
+                                                Width="70">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button Padding="8,2"
+                                            Content="Play"
+                                            Command="{Binding DataContext.PlayClipCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Remove"
+                                                Width="85">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button Padding="8,2"
+                                            Content="Remove"
+                                            Command="{Binding DataContext.RemoveClipCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </GroupBox>
+
+        <Border Grid.Row="3"
+                Margin="0,10,0,10"
+                Padding="10"
+                BorderBrush="#FFBDBDBD"
+                BorderThickness="1"
+                CornerRadius="4">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0"
+                            Margin="0,0,18,0">
+                    <TextBlock FontWeight="SemiBold"
+                               Text="Microphone Volume" />
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Right"
+                                   Margin="8,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Text="{Binding MicrophoneVolumePercent, StringFormat={}{0:F0}%}" />
+                        <Slider Minimum="0"
+                                Maximum="100"
+                                Value="{Binding MicrophoneVolumePercent}" />
+                    </DockPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1"
+                            Margin="0,0,18,0">
+                    <TextBlock FontWeight="SemiBold"
+                               Text="Soundboard Volume" />
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Right"
+                                   Margin="8,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Text="{Binding SoundboardVolumePercent, StringFormat={}{0:F0}%}" />
+                        <Slider Minimum="0"
+                                Maximum="100"
+                                Value="{Binding SoundboardVolumePercent}" />
+                    </DockPanel>
+                </StackPanel>
+
+                <CheckBox Grid.Column="2"
+                          Margin="0,18,18,0"
+                          VerticalAlignment="Center"
+                          Content="Mute Microphone"
+                          IsChecked="{Binding IsMicrophoneMuted}" />
+
+                <Button Grid.Column="3"
+                        Margin="0,12,0,0"
+                        Padding="14,6"
+                        VerticalAlignment="Center"
+                        Content="Stop All"
+                        Command="{Binding StopAllCommand}" />
+            </Grid>
+        </Border>
+
+        <GroupBox Grid.Row="4"
+                  Header="Log"
+                  Padding="8">
+            <ListBox ItemsSource="{Binding LogEntries}"
+                     FontFamily="Consolas"
+                     HorizontalContentAlignment="Stretch">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding DisplayText}"
+                                   TextWrapping="Wrap" />
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </GroupBox>
+    </Grid>
+</Window>
