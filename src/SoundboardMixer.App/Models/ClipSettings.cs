@@ -11,5 +11,7 @@ public sealed class ClipSettings
 
     public string SourcePath { get; set; } = string.Empty;
 
+    public float Volume { get; set; } = 1.0f;
+
     public string? HotkeyText { get; set; }
 }

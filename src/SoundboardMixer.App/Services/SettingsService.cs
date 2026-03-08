@@ -86,6 +86,7 @@ public sealed class SettingsService : ISettingsService
             clip.Id = string.IsNullOrWhiteSpace(clip.Id) ? Guid.NewGuid().ToString("N") : clip.Id;
             clip.DisplayName = clip.DisplayName?.Trim() ?? string.Empty;
             clip.SourcePath = clip.SourcePath?.Trim() ?? string.Empty;
+            clip.Volume = Math.Clamp(clip.Volume, 0.0f, 1.0f);
             clip.HotkeyText = string.IsNullOrWhiteSpace(clip.HotkeyText) ? null : clip.HotkeyText.Trim();
         }
 

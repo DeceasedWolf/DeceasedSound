@@ -5,9 +5,9 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Soundboard Mixer"
-        Width="1180"
+        Width="1320"
         Height="760"
-        MinWidth="1020"
+        MinWidth="1160"
         MinHeight="680">
     <Grid Margin="12">
         <Grid.RowDefinitions>
@@ -25,6 +25,7 @@
                 CornerRadius="4">
             <Grid>
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
@@ -46,20 +47,34 @@
                             Margin="0,0,12,0">
                     <TextBlock Margin="0,0,0,4"
                                FontWeight="SemiBold"
-                               Text="Playback Output" />
+                               Text="Mixed Output" />
                     <ComboBox ItemsSource="{Binding OutputDevices}"
                               DisplayMemberPath="DisplayName"
                               SelectedItem="{Binding SelectedOutput}"
-                              MinWidth="320" />
+                              MinWidth="250" />
                 </StackPanel>
 
-                <Button Grid.Column="2"
+                <StackPanel Grid.Column="2"
+                            Margin="0,0,12,0">
+                    <TextBlock Margin="0,0,0,4"
+                               FontWeight="SemiBold"
+                               Text="Speaker Monitor" />
+                    <ComboBox ItemsSource="{Binding OutputDevices}"
+                              DisplayMemberPath="DisplayName"
+                              SelectedItem="{Binding SelectedSpeakerOutput}"
+                              MinWidth="250" />
+                    <CheckBox Margin="0,6,0,0"
+                              Content="Hear clips in speaker monitor"
+                              IsChecked="{Binding IsSpeakerMonitorEnabled}" />
+                </StackPanel>
+
+                <Button Grid.Column="3"
                         Margin="0,20,12,0"
                         Padding="14,6"
                         Content="Refresh Devices"
                         Command="{Binding RefreshDevicesCommand}" />
 
-                <Button Grid.Column="3"
+                <Button Grid.Column="4"
                         Margin="0,20,0,0"
                         Padding="14,6"
                         Content="Restart Audio"
@@ -134,6 +149,23 @@
                                             Binding="{Binding AvailabilityText}"
                                             IsReadOnly="True"
                                             Width="140" />
+                        <DataGridTemplateColumn Header="Clip Volume"
+                                                Width="170">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <DockPanel>
+                                        <TextBlock DockPanel.Dock="Right"
+                                                   Margin="8,0,0,0"
+                                                   VerticalAlignment="Center"
+                                                   Text="{Binding VolumePercent, StringFormat={}{0:F0}%}" />
+                                        <Slider Minimum="0"
+                                                Maximum="100"
+                                                TickFrequency="5"
+                                                Value="{Binding VolumePercent, UpdateSourceTrigger=PropertyChanged}" />
+                                    </DockPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                         <DataGridTextColumn Header="Hotkey"
                                             Binding="{Binding HotkeyText, UpdateSourceTrigger=LostFocus}"
                                             Width="120" />

@@ -10,16 +10,22 @@ public sealed class AudioEngineService : IAudioEngineService
 {
     public const int InternalSampleRate = 48_000;
     public const int InternalChannels = 2;
+    private const int CaptureLatencyMilliseconds = 25;
+    private const int MicrophoneBufferMilliseconds = 50;
+    private const int EventDrivenRenderLatencyMilliseconds = 25;
+    private const int PollingRenderLatencyMilliseconds = 40;
 
     private readonly object _engineLock = new();
-    private readonly object _activeClipLock = new();
+    private readonly object _clipPlaybackLock = new();
     private readonly ILogService _logService;
-    private readonly List<ActiveClipPlayback> _activeClips = [];
+    private readonly List<ActiveClipPlayback> _mixedOutputClips = [];
+    private readonly List<ActiveClipPlayback> _speakerMonitorClips = [];
 
     private WasapiCapture? _microphoneCapture;
     private BufferedWaveProvider? _microphoneBuffer;
     private ISampleProvider? _microphoneSampleProvider;
     private WasapiOut? _output;
+    private WasapiOut? _speakerOutput;
 
     private float _microphoneVolume = 1.0f;
     private float _soundboardVolume = 1.0f;
@@ -54,7 +60,7 @@ public sealed class AudioEngineService : IAudioEngineService
             .ToList();
     }
 
-    public void Start(string? microphoneDeviceId, string? outputDeviceId)
+    public void Start(string? microphoneDeviceId, string? outputDeviceId, string? speakerDeviceId, bool speakerMonitorEnabled)
     {
         lock (_engineLock)
         {
@@ -63,6 +69,7 @@ public sealed class AudioEngineService : IAudioEngineService
             using var enumerator = new MMDeviceEnumerator();
             var microphoneDevice = ResolveDevice(enumerator, DataFlow.Capture, microphoneDeviceId);
             var outputDevice = ResolveDevice(enumerator, DataFlow.Render, outputDeviceId);
+            var speakerDevice = ResolveDevice(enumerator, DataFlow.Render, speakerDeviceId);
 
             if (microphoneDevice is null)
             {
@@ -78,15 +85,18 @@ public sealed class AudioEngineService : IAudioEngineService
 
             try
             {
-                _microphoneCapture = new WasapiCapture(microphoneDevice);
+                _microphoneCapture = new WasapiCapture(microphoneDevice, true, CaptureLatencyMilliseconds)
+                {
+                    ShareMode = AudioClientShareMode.Shared
+                };
                 _microphoneCapture.DataAvailable += OnMicrophoneDataAvailable;
                 _microphoneCapture.RecordingStopped += OnMicrophoneRecordingStopped;
 
                 _microphoneBuffer = new BufferedWaveProvider(_microphoneCapture.WaveFormat)
                 {
-                    BufferDuration = TimeSpan.FromMilliseconds(250),
+                    BufferDuration = TimeSpan.FromMilliseconds(MicrophoneBufferMilliseconds),
                     DiscardOnBufferOverflow = true,
-                    ReadFully = true
+                    ReadFully = false
                 };
 
                 _microphoneSampleProvider = AudioSampleProviderUtilities
@@ -94,18 +104,57 @@ public sealed class AudioEngineService : IAudioEngineService
 
                 var waveProvider = BuildOutputWaveProvider(outputDevice);
 
-                _output = CreateOutput(outputDevice, waveProvider);
+                _output = CreateOutput(outputDevice, waveProvider, "mixed output");
                 _output.PlaybackStopped += OnOutputPlaybackStopped;
-
                 _output.Play();
+
+                var shouldStartSpeakerMonitor =
+                    speakerMonitorEnabled &&
+                    speakerDevice is not null &&
+                    !string.Equals(speakerDevice.ID, outputDevice.ID, StringComparison.OrdinalIgnoreCase);
+
+                if (shouldStartSpeakerMonitor)
+                {
+                    var speakerWaveProvider = BuildOutputWaveProvider(speakerDevice!, new SpeakerMonitorSampleProvider(this));
+                    try
+                    {
+                        _speakerOutput = CreateOutput(speakerDevice!, speakerWaveProvider, "speaker monitor");
+                        _speakerOutput.PlaybackStopped += OnSpeakerOutputPlaybackStopped;
+                        _speakerOutput.Play();
+                        _logService.Info($"Speaker monitor format: {speakerWaveProvider.WaveFormat}");
+                    }
+                    catch (Exception exception)
+                    {
+                        _speakerOutput?.Dispose();
+                        _speakerOutput = null;
+                        _logService.Warning(
+                            $"Speaker monitor failed to start on '{speakerDevice!.FriendlyName}'. Clips will only play to the mixed output. {exception.Message}");
+                    }
+                }
+                else if (speakerMonitorEnabled && speakerDevice is not null)
+                {
+                    _logService.Info("Speaker monitor disabled because it matches the mixed output device.");
+                }
+                else if (!speakerMonitorEnabled)
+                {
+                    _logService.Info("Speaker monitor playback is turned off.");
+                }
+
                 _microphoneCapture.StartRecording();
                 _logService.Info($"Microphone capture format: {_microphoneCapture.WaveFormat}");
                 _logService.Info($"Output render format: {waveProvider.WaveFormat}");
-                SetStatus($"Running: {microphoneDevice.FriendlyName} -> {outputDevice.FriendlyName}");
+                _logService.Info(
+                    $"Latency profile: capture {CaptureLatencyMilliseconds} ms, mic buffer {MicrophoneBufferMilliseconds} ms, render {EventDrivenRenderLatencyMilliseconds}/{PollingRenderLatencyMilliseconds} ms.");
+                SetStatus(
+                    _speakerOutput is not null
+                        ? $"Running: {microphoneDevice.FriendlyName} -> {outputDevice.FriendlyName} | Clips -> {speakerDevice!.FriendlyName}"
+                        : $"Running: {microphoneDevice.FriendlyName} -> {outputDevice.FriendlyName}");
             }
             catch (Exception exception)
             {
-                _logService.Error("Failed to start the audio engine.", exception);
+                _logService.Error(
+                    $"Failed to start the audio engine for microphone '{microphoneDevice.FriendlyName}' and mixed output '{outputDevice.FriendlyName}'.",
+                    exception);
                 StopInternal(updateStatus: false);
                 SetStatus("Audio start failed. See the log for details.");
             }
@@ -120,7 +169,7 @@ public sealed class AudioEngineService : IAudioEngineService
         }
     }
 
-    public void PlayClip(LoadedClip clip)
+    public void PlayClip(LoadedClip clip, float volume)
     {
         ArgumentNullException.ThrowIfNull(clip);
 
@@ -129,17 +178,24 @@ public sealed class AudioEngineService : IAudioEngineService
             return;
         }
 
-        lock (_activeClipLock)
+        lock (_clipPlaybackLock)
         {
-            _activeClips.Add(new ActiveClipPlayback(clip));
+            var clampedVolume = Math.Clamp(volume, 0.0f, 1.0f);
+            _mixedOutputClips.Add(new ActiveClipPlayback(clip, clampedVolume));
+
+            if (_speakerOutput is not null)
+            {
+                _speakerMonitorClips.Add(new ActiveClipPlayback(clip, clampedVolume));
+            }
         }
     }
 
     public void StopAllClips()
     {
-        lock (_activeClipLock)
+        lock (_clipPlaybackLock)
         {
-            _activeClips.Clear();
+            _mixedOutputClips.Clear();
+            _speakerMonitorClips.Clear();
         }
     }
 
@@ -177,22 +233,23 @@ public sealed class AudioEngineService : IAudioEngineService
         return devices[0];
     }
 
-    private WasapiOut CreateOutput(MMDevice outputDevice, IWaveProvider waveProvider)
+    private WasapiOut CreateOutput(MMDevice outputDevice, IWaveProvider waveProvider, string outputRole)
     {
         WasapiOut? output = null;
 
         try
         {
-            output = new WasapiOut(outputDevice, AudioClientShareMode.Shared, true, 50);
+            output = new WasapiOut(outputDevice, AudioClientShareMode.Shared, true, EventDrivenRenderLatencyMilliseconds);
             output.Init(waveProvider);
             return output;
         }
         catch (Exception exception)
         {
             output?.Dispose();
-            _logService.Warning($"Event-driven WASAPI output failed. Falling back to polling mode. {exception.Message}");
+            _logService.Warning(
+                $"Event-driven WASAPI {outputRole} failed on '{outputDevice.FriendlyName}'. Falling back to polling mode. {exception.Message}");
 
-            output = new WasapiOut(outputDevice, AudioClientShareMode.Shared, false, 80);
+            output = new WasapiOut(outputDevice, AudioClientShareMode.Shared, false, PollingRenderLatencyMilliseconds);
             output.Init(waveProvider);
             return output;
         }
@@ -200,8 +257,13 @@ public sealed class AudioEngineService : IAudioEngineService
 
     private IWaveProvider BuildOutputWaveProvider(MMDevice outputDevice)
     {
+        return BuildOutputWaveProvider(outputDevice, new AudioEngineSampleProvider(this));
+    }
+
+    private IWaveProvider BuildOutputWaveProvider(MMDevice outputDevice, ISampleProvider sourceProvider)
+    {
         var targetFormat = outputDevice.AudioClient.MixFormat;
-        ISampleProvider sampleProvider = new AudioEngineSampleProvider(this);
+        ISampleProvider sampleProvider = sourceProvider;
 
         if (targetFormat.SampleRate != InternalSampleRate)
         {
@@ -229,6 +291,14 @@ public sealed class AudioEngineService : IAudioEngineService
                 _output = null;
             }
 
+            if (_speakerOutput is not null)
+            {
+                _speakerOutput.PlaybackStopped -= OnSpeakerOutputPlaybackStopped;
+                TryExecute(_speakerOutput.Stop);
+                _speakerOutput.Dispose();
+                _speakerOutput = null;
+            }
+
             if (_microphoneCapture is not null)
             {
                 _microphoneCapture.DataAvailable -= OnMicrophoneDataAvailable;
@@ -241,9 +311,10 @@ public sealed class AudioEngineService : IAudioEngineService
             _microphoneBuffer = null;
             _microphoneSampleProvider = null;
 
-            lock (_activeClipLock)
+            lock (_clipPlaybackLock)
             {
-                _activeClips.Clear();
+                _mixedOutputClips.Clear();
+                _speakerMonitorClips.Clear();
             }
         }
         finally
@@ -289,6 +360,16 @@ public sealed class AudioEngineService : IAudioEngineService
         HandleTransportStopped("Audio output stopped unexpectedly.", eventArgs.Exception);
     }
 
+    private void OnSpeakerOutputPlaybackStopped(object? sender, StoppedEventArgs eventArgs)
+    {
+        if (Interlocked.CompareExchange(ref _isStopping, 0, 0) == 1)
+        {
+            return;
+        }
+
+        HandleTransportStopped("Speaker monitor output stopped unexpectedly.", eventArgs.Exception);
+    }
+
     private void HandleTransportStopped(string message, Exception? exception)
     {
         if (exception is not null)
@@ -312,7 +393,14 @@ public sealed class AudioEngineService : IAudioEngineService
     {
         Array.Clear(buffer, offset, count);
         MixMicrophone(buffer, offset, count);
-        MixSoundboard(buffer, offset, count);
+        MixClips(buffer, offset, count, _mixedOutputClips);
+        ApplySoftLimiter(buffer, offset, count);
+    }
+
+    private void FillSpeakerMonitorBuffer(float[] buffer, int offset, int count)
+    {
+        Array.Clear(buffer, offset, count);
+        MixClips(buffer, offset, count, _speakerMonitorClips);
         ApplySoftLimiter(buffer, offset, count);
     }
 
@@ -345,34 +433,34 @@ public sealed class AudioEngineService : IAudioEngineService
         }
     }
 
-    private void MixSoundboard(float[] buffer, int offset, int count)
+    private void MixClips(float[] buffer, int offset, int count, List<ActiveClipPlayback> activeClips)
     {
         var soundboardVolume = _soundboardVolume;
 
-        lock (_activeClipLock)
+        lock (_clipPlaybackLock)
         {
-            for (var clipIndex = _activeClips.Count - 1; clipIndex >= 0; clipIndex--)
+            for (var clipIndex = activeClips.Count - 1; clipIndex >= 0; clipIndex--)
             {
-                var activeClip = _activeClips[clipIndex];
+                var activeClip = activeClips[clipIndex];
                 var availableSamples = activeClip.Clip.SampleBuffer.Length - activeClip.Position;
 
                 if (availableSamples <= 0)
                 {
-                    _activeClips.RemoveAt(clipIndex);
+                    activeClips.RemoveAt(clipIndex);
                     continue;
                 }
 
                 var samplesToMix = Math.Min(count, availableSamples);
                 for (var sampleIndex = 0; sampleIndex < samplesToMix; sampleIndex++)
                 {
-                    buffer[offset + sampleIndex] += activeClip.Clip.SampleBuffer[activeClip.Position + sampleIndex] * soundboardVolume;
+                    buffer[offset + sampleIndex] += activeClip.Clip.SampleBuffer[activeClip.Position + sampleIndex] * soundboardVolume * activeClip.Volume;
                 }
 
                 activeClip.Position += samplesToMix;
 
                 if (activeClip.Position >= activeClip.Clip.SampleBuffer.Length)
                 {
-                    _activeClips.RemoveAt(clipIndex);
+                    activeClips.RemoveAt(clipIndex);
                 }
             }
         }
@@ -433,14 +521,36 @@ public sealed class AudioEngineService : IAudioEngineService
         }
     }
 
+    private sealed class SpeakerMonitorSampleProvider : ISampleProvider
+    {
+        private readonly AudioEngineService _owner;
+
+        public SpeakerMonitorSampleProvider(AudioEngineService owner)
+        {
+            _owner = owner;
+            WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(InternalSampleRate, InternalChannels);
+        }
+
+        public WaveFormat WaveFormat { get; }
+
+        public int Read(float[] buffer, int offset, int count)
+        {
+            _owner.FillSpeakerMonitorBuffer(buffer, offset, count);
+            return count;
+        }
+    }
+
     private sealed class ActiveClipPlayback
     {
-        public ActiveClipPlayback(LoadedClip clip)
+        public ActiveClipPlayback(LoadedClip clip, float volume)
         {
             Clip = clip;
+            Volume = volume;
         }
 
         public LoadedClip Clip { get; }
+
+        public float Volume { get; }
 
         public int Position { get; set; }
     }

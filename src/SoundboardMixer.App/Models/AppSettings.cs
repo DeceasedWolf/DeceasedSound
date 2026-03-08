@@ -9,6 +9,10 @@ public sealed class AppSettings
 
     public string? SelectedOutputDeviceId { get; set; }
 
+    public string? SelectedSpeakerDeviceId { get; set; }
+
+    public bool IsSpeakerMonitorEnabled { get; set; } = true;
+
     public float MicrophoneVolume { get; set; } = 1.0f;
 
     public float SoundboardVolume { get; set; } = 1.0f;

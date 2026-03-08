@@ -24,11 +24,13 @@ internal sealed class MainWindowViewModel : ObservableObject
 
     private AudioDeviceInfo? _selectedMicrophone;
     private AudioDeviceInfo? _selectedOutput;
+    private AudioDeviceInfo? _selectedSpeakerOutput;
     private ClipItemViewModel? _selectedClip;
     private string _engineStatus = "Initializing audio...";
     private double _microphoneVolumePercent;
     private double _soundboardVolumePercent;
     private bool _isMicrophoneMuted;
+    private bool _isSpeakerMonitorEnabled;
     private bool _isInitializing;
     private bool _isRefreshingDevices;
 
@@ -52,6 +54,7 @@ internal sealed class MainWindowViewModel : ObservableObject
         _microphoneVolumePercent = settings.MicrophoneVolume * 100.0;
         _soundboardVolumePercent = settings.SoundboardVolume * 100.0;
         _isMicrophoneMuted = settings.IsMicrophoneMuted;
+        _isSpeakerMonitorEnabled = settings.IsSpeakerMonitorEnabled;
 
         RefreshDevicesCommand = new RelayCommand(RefreshDevices);
         RestartAudioCommand = new RelayCommand(RestartAudio);
@@ -121,6 +124,18 @@ internal sealed class MainWindowViewModel : ObservableObject
         }
     }
 
+    public AudioDeviceInfo? SelectedSpeakerOutput
+    {
+        get => _selectedSpeakerOutput;
+        set
+        {
+            if (SetProperty(ref _selectedSpeakerOutput, value))
+            {
+                OnSelectedDeviceChanged();
+            }
+        }
+    }
+
     public ClipItemViewModel? SelectedClip
     {
         get => _selectedClip;
@@ -176,6 +191,19 @@ internal sealed class MainWindowViewModel : ObservableObject
             if (SetProperty(ref _isMicrophoneMuted, value))
             {
                 ApplyMixSettings();
+                ScheduleSave();
+            }
+        }
+    }
+
+    public bool IsSpeakerMonitorEnabled
+    {
+        get => _isSpeakerMonitorEnabled;
+        set
+        {
+            if (SetProperty(ref _isSpeakerMonitorEnabled, value))
+            {
+                OnSelectedDeviceChanged();
                 ScheduleSave();
             }
         }
@@ -271,6 +299,7 @@ internal sealed class MainWindowViewModel : ObservableObject
                 clipSettings.Id,
                 displayName,
                 clipSettings.SourcePath,
+                clipSettings.Volume,
                 clipSettings.HotkeyText,
                 OnClipChanged);
 
@@ -293,6 +322,7 @@ internal sealed class MainWindowViewModel : ObservableObject
                 Guid.NewGuid().ToString("N"),
                 Path.GetFileNameWithoutExtension(path),
                 path,
+                1.0f,
                 null,
                 OnClipChanged);
 
@@ -333,7 +363,7 @@ internal sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
-        _audioEngineService.PlayClip(clip.LoadedClip);
+        _audioEngineService.PlayClip(clip.LoadedClip, (float)(clip.VolumePercent / 100.0));
     }
 
     private void RemoveSelectedClip()
@@ -367,6 +397,7 @@ internal sealed class MainWindowViewModel : ObservableObject
     {
         var preferredMicrophoneId = SelectedMicrophone?.Id ?? _settings.SelectedMicrophoneId;
         var preferredOutputId = SelectedOutput?.Id ?? _settings.SelectedOutputDeviceId;
+        var preferredSpeakerId = SelectedSpeakerOutput?.Id ?? _settings.SelectedSpeakerDeviceId;
 
         var microphones = _audioEngineService.GetCaptureDevices();
         var outputs = _audioEngineService.GetRenderDevices();
@@ -386,7 +417,13 @@ internal sealed class MainWindowViewModel : ObservableObject
             SelectedOutput = ResolveDeviceSelection(
                 OutputDevices,
                 preferredOutputId,
-                "output");
+                "mixed output");
+
+            SelectedSpeakerOutput = ResolveDeviceSelection(
+                OutputDevices,
+                preferredSpeakerId,
+                "speaker monitor",
+                SelectedOutput?.Id);
         }
         finally
         {
@@ -403,7 +440,8 @@ internal sealed class MainWindowViewModel : ObservableObject
     private AudioDeviceInfo? ResolveDeviceSelection(
         ObservableCollection<AudioDeviceInfo> devices,
         string? preferredDeviceId,
-        string deviceLabel)
+        string deviceLabel,
+        string? excludedDeviceId = null)
     {
         if (devices.Count == 0)
         {
@@ -424,13 +462,19 @@ internal sealed class MainWindowViewModel : ObservableObject
             _logService.Warning($"Saved {deviceLabel} device was not found. Falling back to '{devices[0].DisplayName}'.");
         }
 
-        return devices[0];
+        return devices.FirstOrDefault(device =>
+                   !string.Equals(device.Id, excludedDeviceId, StringComparison.OrdinalIgnoreCase))
+               ?? devices[0];
     }
 
     private void RestartAudio()
     {
         ApplyMixSettings();
-        _audioEngineService.Start(SelectedMicrophone?.Id, SelectedOutput?.Id);
+        _audioEngineService.Start(
+            SelectedMicrophone?.Id,
+            SelectedOutput?.Id,
+            SelectedSpeakerOutput?.Id,
+            IsSpeakerMonitorEnabled);
     }
 
     private void ApplyMixSettings()
@@ -508,6 +552,8 @@ internal sealed class MainWindowViewModel : ObservableObject
         {
             SelectedMicrophoneId = SelectedMicrophone?.Id,
             SelectedOutputDeviceId = SelectedOutput?.Id,
+            SelectedSpeakerDeviceId = SelectedSpeakerOutput?.Id,
+            IsSpeakerMonitorEnabled = IsSpeakerMonitorEnabled,
             MicrophoneVolume = (float)(MicrophoneVolumePercent / 100.0),
             SoundboardVolume = (float)(SoundboardVolumePercent / 100.0),
             IsMicrophoneMuted = IsMicrophoneMuted,
@@ -527,6 +573,8 @@ internal sealed class MainWindowViewModel : ObservableObject
     {
         _settings.SelectedMicrophoneId = snapshot.SelectedMicrophoneId;
         _settings.SelectedOutputDeviceId = snapshot.SelectedOutputDeviceId;
+        _settings.SelectedSpeakerDeviceId = snapshot.SelectedSpeakerDeviceId;
+        _settings.IsSpeakerMonitorEnabled = snapshot.IsSpeakerMonitorEnabled;
         _settings.MicrophoneVolume = snapshot.MicrophoneVolume;
         _settings.SoundboardVolume = snapshot.SoundboardVolume;
         _settings.IsMicrophoneMuted = snapshot.IsMicrophoneMuted;

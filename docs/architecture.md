@@ -27,7 +27,8 @@ The audio pipeline is:
 5. Load each imported clip with `AudioFileReader`, decode it up front, and normalize it into the same internal mix format.
 6. Mix live microphone samples plus all currently active clips inside a single custom `ISampleProvider`.
 7. Apply a simple soft limiter/clamp pass before output.
-8. Send the mixed stream to the selected playback/render device through `WasapiOut`.
+8. Send the full mic+clip mix to the selected mixed output device through `WasapiOut`.
+9. Optionally send a second clip-only render stream to a separate speaker/headphone device through another `WasapiOut` instance, controlled by a user-facing enable toggle.
 
 This keeps microphone capture, clip scheduling, mixing, and playback routing in one focused service.
 
@@ -38,6 +39,8 @@ This keeps microphone capture, clip scheduling, mixing, and playback routing in 
 - Enumerates capture and render devices.
 - Starts/stops WASAPI microphone capture and render output.
 - Mixes live microphone audio with active in-memory clips.
+- Maintains a second clip-only speaker-monitor output when configured.
+- Uses a lower-latency shared-mode capture/render profile than the original scaffold.
 - Applies microphone volume, soundboard volume, mute state, and a soft limiter.
 - Raises engine status updates for the UI.
 
@@ -77,7 +80,7 @@ This keeps microphone capture, clip scheduling, mixing, and playback routing in 
 The WPF window is organized into three functional areas:
 
 - Top:
-  microphone/output selectors, refresh/restart controls, and engine status.
+  microphone selector, mixed-output selector, speaker-monitor selector, refresh/restart controls, and engine status.
 - Middle:
   clip list with label editing, file status, hotkey editing, play, and remove actions.
 - Bottom:
@@ -95,7 +98,8 @@ The WPF window is organized into three functional areas:
 The expected usage is:
 
 1. In the app, select the real microphone as input.
-2. In the app, select `VB-CABLE Input` as output.
-3. In Discord, select `VB-CABLE Output` as the microphone input.
+2. In the app, select `VB-CABLE Input` as mixed output.
+3. In the app, select your real speakers or headphones as speaker monitor if desired.
+4. In Discord, select `VB-CABLE Output` as the microphone input.
 
 This preserves the project goal of routing audio through an existing playback device instead of implementing a virtual driver.

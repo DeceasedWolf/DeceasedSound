@@ -12,17 +12,20 @@ internal sealed class ClipItemViewModel : ObservableObject
     private string _hotkeyStatus = string.Empty;
     private string _availabilityText = "Not loaded";
     private bool _isAvailable;
+    private double _volumePercent;
 
     public ClipItemViewModel(
         string id,
         string displayName,
         string sourcePath,
+        float volume,
         string? hotkeyText,
         Action<ClipItemViewModel, string> changeCallback)
     {
         Id = id;
         _displayName = displayName;
         SourcePath = sourcePath;
+        _volumePercent = Math.Clamp(volume, 0.0f, 1.0f) * 100.0;
         _hotkeyText = hotkeyText;
         _changeCallback = changeCallback;
     }
@@ -56,6 +59,19 @@ internal sealed class ClipItemViewModel : ObservableObject
             if (SetProperty(ref _hotkeyText, nextValue))
             {
                 _changeCallback(this, nameof(HotkeyText));
+            }
+        }
+    }
+
+    public double VolumePercent
+    {
+        get => _volumePercent;
+        set
+        {
+            var clamped = Math.Clamp(value, 0.0, 100.0);
+            if (SetProperty(ref _volumePercent, clamped))
+            {
+                _changeCallback(this, nameof(VolumePercent));
             }
         }
     }
@@ -101,6 +117,7 @@ internal sealed class ClipItemViewModel : ObservableObject
                 ? Path.GetFileNameWithoutExtension(SourcePath)
                 : DisplayName.Trim(),
             SourcePath = SourcePath,
+            Volume = (float)(VolumePercent / 100.0),
             HotkeyText = string.IsNullOrWhiteSpace(HotkeyText) ? null : HotkeyText.Trim()
         };
     }

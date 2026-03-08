@@ -13,11 +13,11 @@ public interface IAudioEngineService : IDisposable
 
     IReadOnlyList<AudioDeviceInfo> GetRenderDevices();
 
-    void Start(string? microphoneDeviceId, string? outputDeviceId);
+    void Start(string? microphoneDeviceId, string? outputDeviceId, string? speakerDeviceId, bool speakerMonitorEnabled);
 
     void Stop();
 
-    void PlayClip(LoadedClip clip);
+    void PlayClip(LoadedClip clip, float volume);
 
     void StopAllClips();
 
