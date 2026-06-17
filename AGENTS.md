@@ -26,6 +26,7 @@ Do not attempt to create a virtual audio driver.
 - Prefer one WPF app project for runtime code unless another runtime project is clearly justified
 - A separate test project is acceptable for automated coverage
 - Keep implementations concrete and simple
+- Keep UI work in WPF and follow the existing Catppuccin Mocha resource theme/styles
 - Persist settings with System.Text.Json
 - Use RegisterHotKey for global hotkeys
 - Use an internal mix format of 48 kHz, 32-bit float, stereo

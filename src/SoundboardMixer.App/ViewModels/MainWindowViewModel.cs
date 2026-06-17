@@ -20,6 +20,7 @@ internal sealed class MainWindowViewModel : ObservableObject
     private readonly ISettingsService _settingsService;
     private readonly IFileDialogService _fileDialogService;
     private readonly ClipLoaderService _clipLoaderService;
+    private readonly IStartupRegistrationService _startupRegistrationService;
     private readonly IAudioEngineService _audioEngineService;
     private readonly IGlobalHotkeyService _globalHotkeyService;
     private readonly ILogService _logService;
@@ -39,6 +40,9 @@ internal sealed class MainWindowViewModel : ObservableObject
     private bool _isMicrophoneMuted;
     private bool _isSpeakerMonitorEnabled;
     private bool _isClipBrowserOpen;
+    private bool _isSettingsOpen;
+    private bool _isAutoStartOnWindowsStart;
+    private bool _isMinimizeToSystemTrayOnClose;
     private bool _isInitializing;
     private bool _isRefreshingDevices;
     private readonly CollectionViewSource _clipBrowserViewSource;
@@ -48,6 +52,7 @@ internal sealed class MainWindowViewModel : ObservableObject
         ISettingsService settingsService,
         IFileDialogService fileDialogService,
         ClipLoaderService clipLoaderService,
+        IStartupRegistrationService startupRegistrationService,
         IAudioEngineService audioEngineService,
         IGlobalHotkeyService globalHotkeyService,
         ILogService logService)
@@ -56,6 +61,7 @@ internal sealed class MainWindowViewModel : ObservableObject
         _settingsService = settingsService;
         _fileDialogService = fileDialogService;
         _clipLoaderService = clipLoaderService;
+        _startupRegistrationService = startupRegistrationService;
         _audioEngineService = audioEngineService;
         _globalHotkeyService = globalHotkeyService;
         _logService = logService;
@@ -65,6 +71,8 @@ internal sealed class MainWindowViewModel : ObservableObject
         _soundboardVolumePercent = settings.SoundboardVolume * 100.0;
         _isMicrophoneMuted = settings.IsMicrophoneMuted;
         _isSpeakerMonitorEnabled = settings.IsSpeakerMonitorEnabled;
+        _isAutoStartOnWindowsStart = settings.AutoStartOnWindowsStart;
+        _isMinimizeToSystemTrayOnClose = settings.MinimizeToSystemTrayOnClose;
         _clipBrowserViewSource = new CollectionViewSource { Source = Clips };
         _clipBrowserViewSource.Filter += OnClipBrowserFilter;
 
@@ -72,8 +80,10 @@ internal sealed class MainWindowViewModel : ObservableObject
         RestartAudioCommand = new RelayCommand(RestartAudio);
         AddClipsCommand = new AsyncRelayCommand(AddClipsAsync);
         StopAllCommand = new RelayCommand(StopAllClips);
-        OpenClipBrowserCommand = new RelayCommand(() => IsClipBrowserOpen = true);
+        OpenClipBrowserCommand = new RelayCommand(OpenClipBrowser);
         CloseClipBrowserCommand = new RelayCommand(() => IsClipBrowserOpen = false);
+        OpenSettingsCommand = new RelayCommand(OpenSettings);
+        CloseSettingsCommand = new RelayCommand(() => IsSettingsOpen = false);
         RemoveSelectedClipCommand = new RelayCommand(RemoveSelectedClip, () => SelectedClip is not null);
         PlaySelectedClipCommand = new AsyncRelayCommand(PlaySelectedClipAsync, () => SelectedClip is not null);
         RemoveClipCommand = new RelayCommand<ClipItemViewModel?>(RemoveClip);
@@ -118,6 +128,10 @@ internal sealed class MainWindowViewModel : ObservableObject
     public RelayCommand OpenClipBrowserCommand { get; }
 
     public RelayCommand CloseClipBrowserCommand { get; }
+
+    public RelayCommand OpenSettingsCommand { get; }
+
+    public RelayCommand CloseSettingsCommand { get; }
 
     public RelayCommand RemoveSelectedClipCommand { get; }
 
@@ -202,6 +216,44 @@ internal sealed class MainWindowViewModel : ObservableObject
         set => SetProperty(ref _isClipBrowserOpen, value);
     }
 
+    public bool IsSettingsOpen
+    {
+        get => _isSettingsOpen;
+        set => SetProperty(ref _isSettingsOpen, value);
+    }
+
+    public bool IsAutoStartOnWindowsStart
+    {
+        get => _isAutoStartOnWindowsStart;
+        set
+        {
+            if (!SetProperty(ref _isAutoStartOnWindowsStart, value))
+            {
+                return;
+            }
+
+            if (!ApplyAutoStartSetting(value))
+            {
+                _isAutoStartOnWindowsStart = !value;
+                OnPropertyChanged(nameof(IsAutoStartOnWindowsStart));
+            }
+
+            ScheduleSave();
+        }
+    }
+
+    public bool IsMinimizeToSystemTrayOnClose
+    {
+        get => _isMinimizeToSystemTrayOnClose;
+        set
+        {
+            if (SetProperty(ref _isMinimizeToSystemTrayOnClose, value))
+            {
+                ScheduleSave();
+            }
+        }
+    }
+
     public double MicrophoneVolumePercent
     {
         get => _microphoneVolumePercent;
@@ -266,6 +318,7 @@ internal sealed class MainWindowViewModel : ObservableObject
             await LoadInitialClipsAsync();
             ApplyHotkeyBindings();
             ApplyMixSettings();
+            EnsureStartupRegistration();
             RestartAudio();
         }
         finally
@@ -781,6 +834,8 @@ internal sealed class MainWindowViewModel : ObservableObject
             MicrophoneVolume = (float)(MicrophoneVolumePercent / 100.0),
             SoundboardVolume = (float)(SoundboardVolumePercent / 100.0),
             IsMicrophoneMuted = IsMicrophoneMuted,
+            AutoStartOnWindowsStart = IsAutoStartOnWindowsStart,
+            MinimizeToSystemTrayOnClose = IsMinimizeToSystemTrayOnClose,
             Clips = Clips.Select(clip => clip.ToSettings()).ToList(),
             Window = new WindowSettings
             {
@@ -802,7 +857,44 @@ internal sealed class MainWindowViewModel : ObservableObject
         _settings.MicrophoneVolume = snapshot.MicrophoneVolume;
         _settings.SoundboardVolume = snapshot.SoundboardVolume;
         _settings.IsMicrophoneMuted = snapshot.IsMicrophoneMuted;
+        _settings.AutoStartOnWindowsStart = snapshot.AutoStartOnWindowsStart;
+        _settings.MinimizeToSystemTrayOnClose = snapshot.MinimizeToSystemTrayOnClose;
         _settings.Clips = snapshot.Clips;
+    }
+
+    private void OpenClipBrowser()
+    {
+        IsSettingsOpen = false;
+        IsClipBrowserOpen = true;
+    }
+
+    private void OpenSettings()
+    {
+        IsClipBrowserOpen = false;
+        IsSettingsOpen = true;
+    }
+
+    private void EnsureStartupRegistration()
+    {
+        if (IsAutoStartOnWindowsStart && !ApplyAutoStartSetting(enabled: true))
+        {
+            _isAutoStartOnWindowsStart = false;
+            OnPropertyChanged(nameof(IsAutoStartOnWindowsStart));
+        }
+    }
+
+    private bool ApplyAutoStartSetting(bool enabled)
+    {
+        if (_startupRegistrationService.SetAutoStartEnabled(enabled, out var errorMessage))
+        {
+            return true;
+        }
+
+        _logService.Warning(
+            enabled
+                ? $"Failed to enable Windows startup. {errorMessage}"
+                : $"Failed to disable Windows startup. {errorMessage}");
+        return false;
     }
 
     private void OnAudioEngineStatusChanged(object? sender, string status)

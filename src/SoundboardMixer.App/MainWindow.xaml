@@ -55,8 +55,12 @@
                         Content="Refresh Devices"
                         Command="{Binding RefreshDevicesCommand}" />
 
-                <Button Content="Restart Audio"
+                <Button Margin="0,0,8,0"
+                        Content="Restart Audio"
                         Command="{Binding RestartAudioCommand}" />
+
+                <Button Content="Settings"
+                        Command="{Binding OpenSettingsCommand}" />
             </StackPanel>
         </Grid>
 
@@ -459,6 +463,47 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1"
+                Grid.RowSpan="4"
+                Panel.ZIndex="30"
+                Style="{StaticResource PanelBorderStyle}"
+                Visibility="{Binding IsSettingsOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <DockPanel Margin="0,0,0,18"
+                           LastChildFill="False">
+                    <TextBlock DockPanel.Dock="Left"
+                               VerticalAlignment="Center"
+                               Style="{StaticResource PageTitleTextStyle}"
+                               Text="Settings" />
+
+                    <Button DockPanel.Dock="Right"
+                            Command="{Binding CloseSettingsCommand}"
+                            Content="Close" />
+                </DockPanel>
+
+                <StackPanel Grid.Row="1">
+                    <Border Padding="0,0,0,16"
+                            BorderBrush="{StaticResource Brush.Surface0}"
+                            BorderThickness="0,0,0,1">
+                        <CheckBox Content="Auto Start on Windows Start"
+                                  IsChecked="{Binding IsAutoStartOnWindowsStart}" />
+                    </Border>
+
+                    <Border Padding="0,16,0,16"
+                            BorderBrush="{StaticResource Brush.Surface0}"
+                            BorderThickness="0,0,0,1">
+                        <CheckBox Content="Minimize to System Tray when clicking X"
+                                  IsChecked="{Binding IsMinimizeToSystemTrayOnClose}" />
+                    </Border>
+                </StackPanel>
             </Grid>
         </Border>
     </Grid>

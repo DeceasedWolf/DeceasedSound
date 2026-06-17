@@ -19,6 +19,10 @@ public sealed class AppSettings
 
     public bool IsMicrophoneMuted { get; set; }
 
+    public bool AutoStartOnWindowsStart { get; set; }
+
+    public bool MinimizeToSystemTrayOnClose { get; set; }
+
     public List<ClipSettings> Clips { get; set; } = [];
 
     public WindowSettings Window { get; set; } = new();

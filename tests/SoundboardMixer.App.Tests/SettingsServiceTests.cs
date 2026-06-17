@@ -16,6 +16,8 @@ public sealed class SettingsServiceTests
             {
               "MicrophoneVolume": 3.5,
               "SoundboardVolume": -1.0,
+              "AutoStartOnWindowsStart": true,
+              "MinimizeToSystemTrayOnClose": true,
               "Window": {
                 "Width": 0,
                 "Height": -25
@@ -45,6 +47,8 @@ public sealed class SettingsServiceTests
 
         Assert.AreEqual(3.0f, settings.MicrophoneVolume, 0.0001f);
         Assert.AreEqual(0.0f, settings.SoundboardVolume, 0.0001f);
+        Assert.IsTrue(settings.AutoStartOnWindowsStart);
+        Assert.IsTrue(settings.MinimizeToSystemTrayOnClose);
         Assert.AreEqual(1180, settings.Window.Width);
         Assert.AreEqual(760, settings.Window.Height);
 

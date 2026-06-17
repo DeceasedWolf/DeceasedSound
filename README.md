@@ -1,12 +1,14 @@
-# SoundboardMixer
+# DeceasedSound
 
-SoundboardMixer is a local-only Windows 11 WPF application for mixing a real microphone with triggered soundboard clips and sending the combined result to a normal playback endpoint such as `CABLE Input (VB-Audio Virtual Cable)`, while optionally previewing the clip sounds on a separate speaker device.
+DeceasedSound is a local-only Windows 11 WPF application for mixing a real microphone with triggered soundboard clips and sending the combined result to a normal playback endpoint such as `CABLE Input (VB-Audio Virtual Cable)`, while optionally previewing the clip sounds on a separate speaker device.
+
+The repository and solution are still named `SoundboardMixer`.
 
 It does not create a virtual audio driver. The expected routing is:
 
-1. In SoundboardMixer, choose your real microphone as the input device.
-2. In SoundboardMixer, choose `VB-CABLE Input` as the mixed output device.
-3. In SoundboardMixer, choose your headphones or speakers as the speaker monitor device if you want to hear the clips locally.
+1. In DeceasedSound, choose your real microphone as the input device.
+2. In DeceasedSound, choose `VB-CABLE Input` as the mixed output device.
+3. In DeceasedSound, choose your headphones or speakers as the speaker monitor device if you want to hear the clips locally.
 4. Use the `Hear clips in speaker monitor` toggle to turn that local clip preview on or off.
 5. In Discord or another chat app, choose `VB-CABLE Output` as the microphone input.
 
@@ -19,11 +21,14 @@ That arrangement lets the app mix your live microphone plus sound clips into VB-
 - Imports `.wav` and `.mp3` clips by file path without copying them into the app.
 - Preloads clips into memory and converts them to a 48 kHz, 32-bit float, stereo internal mix format.
 - Supports overlapping clip playback.
+- Includes a searchable Dashboard view with large click-to-play sound tiles for larger soundboards.
+- Shows dashboard tile playback progress and lets an active dashboard sound be stopped by clicking it again.
 - Supports per-clip volume trimming.
 - Mixes live microphone capture with currently playing clips.
 - Can mirror clip playback to a separate speaker/headphone device.
 - Lets you turn speaker-monitor clip playback on or off without losing the selected speaker device.
-- Includes microphone volume, soundboard master volume, microphone mute, stop-all, engine status, and an in-app log.
+- Includes microphone volume, soundboard master volume, microphone mute, stop-all, engine status, and a collapsible in-app log.
+- Includes a Settings page for Windows startup registration and close-to-system-tray behavior.
 - Supports optional global clip hotkeys through `RegisterHotKey`.
 
 ## Build
@@ -45,8 +50,11 @@ dotnet test SoundboardMixer.sln
 6. Click `Add Clips` and import `.wav` or `.mp3` files.
 7. Set each clip's `Clip Volume` as needed.
 8. Trigger clips with the inline `Play` buttons, `Play Selected`, or an optional global hotkey.
-9. Adjust `Microphone Volume` and `Soundboard Volume` as needed.
-10. In Discord, set the microphone input device to `CABLE Output`.
+9. Open `Dashboard` when you want more space to search and trigger many sounds by clicking tiles.
+10. Click an active Dashboard sound tile again to stop that sound.
+11. Adjust `Microphone Volume` and `Soundboard Volume` as needed.
+12. Open `Settings` if you want DeceasedSound to start with Windows or hide to the system tray when closed.
+13. In Discord, set the microphone input device to `CABLE Output`.
 
 ## Hotkeys
 
@@ -57,6 +65,8 @@ dotnet test SoundboardMixer.sln
 ## Notes And Limitations
 
 - The app stores source file paths only. If a clip file moves or is deleted, the UI marks it as missing.
+- The Windows startup toggle writes a current-user `Run` entry for `DeceasedSound`.
+- The system tray option changes the window close button to hide the window. Use the tray icon menu to exit the app.
 - Device disconnects are handled without crashing, but you may need to click `Refresh Devices` or `Restart Audio` after a hardware change.
 - The mixer runs internally at 48 kHz stereo float. Output compatibility still depends on the selected playback device and its shared-mode WASAPI support.
 - The audio engine requests low-latency shared-mode WASAPI capture/render and falls back when a device rejects the lower setting. Windows device periods, format conversion, virtual cable latency, and downstream apps such as Discord still affect perceived delay.

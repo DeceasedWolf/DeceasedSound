@@ -22,6 +22,7 @@ public partial class App : Application
             var settingsService = new SettingsService(logService);
             var fileDialogService = new FileDialogService();
             var clipLoaderService = new ClipLoaderService(logService);
+            var startupRegistrationService = new WindowsStartupRegistrationService();
 
             _audioEngineService = new AudioEngineService(logService);
             _hotkeyService = new GlobalHotkeyService(logService);
@@ -33,6 +34,7 @@ public partial class App : Application
                 settingsService,
                 fileDialogService,
                 clipLoaderService,
+                startupRegistrationService,
                 _audioEngineService,
                 _hotkeyService,
                 logService);
