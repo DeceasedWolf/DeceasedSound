@@ -224,7 +224,7 @@
                                    VerticalAlignment="Center"
                                    Text="{Binding MicrophoneVolumePercent, StringFormat={}{0:F0}%}" />
                         <Slider Minimum="0"
-                                Maximum="100"
+                                Maximum="300"
                                 Value="{Binding MicrophoneVolumePercent}" />
                     </DockPanel>
                 </StackPanel>

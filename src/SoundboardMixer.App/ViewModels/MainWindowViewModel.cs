@@ -162,7 +162,7 @@ internal sealed class MainWindowViewModel : ObservableObject
         get => _microphoneVolumePercent;
         set
         {
-            var clamped = Math.Clamp(value, 0.0, 100.0);
+            var clamped = Math.Clamp(value, 0.0, 300.0);
             if (SetProperty(ref _microphoneVolumePercent, clamped))
             {
                 ApplyMixSettings();

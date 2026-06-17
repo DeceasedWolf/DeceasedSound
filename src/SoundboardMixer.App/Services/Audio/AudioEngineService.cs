@@ -215,7 +215,7 @@ public sealed class AudioEngineService : IAudioEngineService
 
     public void UpdateMixSettings(float microphoneVolume, float soundboardVolume, bool microphoneMuted)
     {
-        _microphoneVolume = Math.Clamp(microphoneVolume, 0.0f, 1.0f);
+        _microphoneVolume = Math.Clamp(microphoneVolume, 0.0f, 3.0f);
         _soundboardVolume = Math.Clamp(soundboardVolume, 0.0f, 1.0f);
         var muteValue = microphoneMuted ? 1 : 0;
         var previousMuteValue = Interlocked.Exchange(ref _microphoneMuted, muteValue);

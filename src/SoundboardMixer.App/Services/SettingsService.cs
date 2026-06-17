@@ -86,7 +86,7 @@ public sealed class SettingsService : ISettingsService
     {
         settings.Clips ??= [];
         settings.Window ??= new WindowSettings();
-        settings.MicrophoneVolume = Math.Clamp(settings.MicrophoneVolume, 0.0f, 1.0f);
+        settings.MicrophoneVolume = Math.Clamp(settings.MicrophoneVolume, 0.0f, 3.0f);
         settings.SoundboardVolume = Math.Clamp(settings.SoundboardVolume, 0.0f, 1.0f);
         settings.Window.Width = settings.Window.Width > 0 ? settings.Window.Width : 1180;
         settings.Window.Height = settings.Window.Height > 0 ? settings.Window.Height : 760;

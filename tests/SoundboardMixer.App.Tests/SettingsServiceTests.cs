@@ -14,7 +14,7 @@ public sealed class SettingsServiceTests
         var settingsPath = directory.FilePath("settings.json");
         await File.WriteAllTextAsync(settingsPath, """
             {
-              "MicrophoneVolume": 2.5,
+              "MicrophoneVolume": 3.5,
               "SoundboardVolume": -1.0,
               "Window": {
                 "Width": 0,
@@ -43,7 +43,7 @@ public sealed class SettingsServiceTests
 
         var settings = await service.LoadAsync();
 
-        Assert.AreEqual(1.0f, settings.MicrophoneVolume, 0.0001f);
+        Assert.AreEqual(3.0f, settings.MicrophoneVolume, 0.0001f);
         Assert.AreEqual(0.0f, settings.SoundboardVolume, 0.0001f);
         Assert.AreEqual(1180, settings.Window.Width);
         Assert.AreEqual(760, settings.Window.Height);
