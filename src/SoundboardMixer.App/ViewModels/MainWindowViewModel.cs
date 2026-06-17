@@ -45,6 +45,7 @@ internal sealed class MainWindowViewModel : ObservableObject
     private bool _isMinimizeToSystemTrayOnClose;
     private bool _isInitializing;
     private bool _isRefreshingDevices;
+    private Task? _shutdownTask;
     private readonly CollectionViewSource _clipBrowserViewSource;
 
     public MainWindowViewModel(
@@ -380,6 +381,18 @@ internal sealed class MainWindowViewModel : ObservableObject
     public Task ShutdownAsync()
     {
         VerifyUiAccess();
+
+        if (_shutdownTask is not null)
+        {
+            return _shutdownTask;
+        }
+
+        _shutdownTask = ShutdownCoreAsync();
+        return _shutdownTask;
+    }
+
+    private async Task ShutdownCoreAsync()
+    {
         _saveTimer.Stop();
         _saveTimer.Tick -= OnSaveTimerTick;
         _playbackTimer.Stop();
@@ -411,7 +424,10 @@ internal sealed class MainWindowViewModel : ObservableObject
         _audioEngineService.StatusChanged -= OnAudioEngineStatusChanged;
         _logService.EntryLogged -= OnLogEntryLogged;
 
-        return snapshot is null ? Task.CompletedTask : _settingsService.SaveAsync(snapshot);
+        if (snapshot is not null)
+        {
+            await _settingsService.SaveAsync(snapshot).ConfigureAwait(false);
+        }
     }
 
     private async Task LoadInitialClipsAsync()

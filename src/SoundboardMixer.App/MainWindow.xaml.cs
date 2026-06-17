@@ -16,6 +16,8 @@ public partial class MainWindow : Window
     private readonly ContextMenu _trayMenu;
     private HwndSource? _hwndSource;
     private bool _isExplicitExitRequested;
+    private bool _isShutdownCloseReady;
+    private bool _isShutdownInProgress;
     private bool _isTrayIconVisible;
     private uint _taskbarCreatedMessage;
     private WindowState _windowStateBeforeTray = WindowState.Normal;
@@ -50,13 +52,41 @@ public partial class MainWindow : Window
         _viewModel.OnHotkeyWindowReady();
     }
 
-    private void OnClosing(object? sender, CancelEventArgs eventArgs)
+    private async void OnClosing(object? sender, CancelEventArgs eventArgs)
     {
+        if (_isShutdownCloseReady)
+        {
+            return;
+        }
+
         _viewModel.CaptureWindowSettings(this);
 
         if (_viewModel.IsMinimizeToSystemTrayOnClose && !_isExplicitExitRequested && TryHideToTray())
         {
             eventArgs.Cancel = true;
+            return;
+        }
+
+        eventArgs.Cancel = true;
+
+        if (_isShutdownInProgress)
+        {
+            return;
+        }
+
+        _isExplicitExitRequested = true;
+        _isShutdownInProgress = true;
+        IsEnabled = false;
+
+        try
+        {
+            await _viewModel.ShutdownAsync();
+        }
+        finally
+        {
+            _isShutdownCloseReady = true;
+            _isShutdownInProgress = false;
+            Close();
         }
     }
 
