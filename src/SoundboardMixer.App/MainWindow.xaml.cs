@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using SoundboardMixer.App.Services.Hotkeys;
@@ -33,6 +34,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        TryUseDarkTitleBar(_hwndSource.Handle);
         _hwndSource.AddHook(WndProc);
         _globalHotkeyService.AttachWindow(_hwndSource.Handle);
         _viewModel.OnHotkeyWindowReady();
@@ -57,4 +59,15 @@ public partial class MainWindow : Window
         _globalHotkeyService.TryHandleWindowMessage(message, wParam, ref handled);
         return IntPtr.Zero;
     }
+
+    private static void TryUseDarkTitleBar(IntPtr hwnd)
+    {
+        var enabled = 1;
+        _ = DwmSetWindowAttribute(hwnd, DwmWindowAttributeUseImmersiveDarkMode, ref enabled, Marshal.SizeOf<int>());
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int attributeValue, int attributeSize);
+
+    private const int DwmWindowAttributeUseImmersiveDarkMode = 20;
 }

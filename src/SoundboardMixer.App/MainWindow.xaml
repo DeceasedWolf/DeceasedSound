@@ -4,135 +4,255 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="Soundboard Mixer"
-        Width="1320"
-        Height="760"
-        MinWidth="1160"
-        MinHeight="680">
-    <Grid Margin="12">
+        Title="DeceasedSound"
+        Width="1360"
+        Height="820"
+        MinWidth="1120"
+        MinHeight="700"
+        Background="{StaticResource Brush.Base}"
+        Foreground="{StaticResource Brush.Text}">
+    <Grid Margin="24"
+          Background="{StaticResource Brush.Base}">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="220" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0"
-                Padding="12"
-                BorderBrush="#FFBDBDBD"
-                BorderThickness="1"
-                CornerRadius="4">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+        <Grid Grid.Row="0"
+              Margin="0,0,0,18">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0"
-                            Margin="0,0,12,0">
-                    <TextBlock Margin="0,0,0,4"
-                               FontWeight="SemiBold"
-                               Text="Microphone Input" />
-                    <ComboBox ItemsSource="{Binding MicrophoneDevices}"
-                              DisplayMemberPath="DisplayName"
-                              SelectedItem="{Binding SelectedMicrophone}"
-                              MinWidth="320" />
-                </StackPanel>
+            <TextBlock VerticalAlignment="Center"
+                       Style="{StaticResource PageTitleTextStyle}"
+                       Text="DeceasedSound" />
 
-                <StackPanel Grid.Column="1"
-                            Margin="0,0,12,0">
-                    <TextBlock Margin="0,0,0,4"
-                               FontWeight="SemiBold"
-                               Text="Mixed Output" />
-                    <ComboBox ItemsSource="{Binding OutputDevices}"
-                              DisplayMemberPath="DisplayName"
-                              SelectedItem="{Binding SelectedOutput}"
-                              MinWidth="250" />
-                </StackPanel>
+            <StackPanel Grid.Column="1"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                <Border Margin="0,0,10,0"
+                        Style="{StaticResource StatusBorderStyle}">
+                    <StackPanel VerticalAlignment="Center"
+                                Orientation="Horizontal">
+                        <TextBlock Margin="0,0,8,0"
+                                   VerticalAlignment="Center"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource Brush.Subtext0}"
+                                   Text="Engine" />
+                        <TextBlock VerticalAlignment="Center"
+                                   Foreground="{StaticResource Brush.Blue}"
+                                   Text="{Binding EngineStatus}" />
+                    </StackPanel>
+                </Border>
 
-                <StackPanel Grid.Column="2"
-                            Margin="0,0,12,0">
-                    <TextBlock Margin="0,0,0,4"
-                               FontWeight="SemiBold"
-                               Text="Speaker Monitor" />
-                    <ComboBox ItemsSource="{Binding OutputDevices}"
-                              DisplayMemberPath="DisplayName"
-                              SelectedItem="{Binding SelectedSpeakerOutput}"
-                              MinWidth="250" />
-                    <CheckBox Margin="0,6,0,0"
-                              Content="Hear clips in speaker monitor"
-                              IsChecked="{Binding IsSpeakerMonitorEnabled}" />
-                </StackPanel>
-
-                <Button Grid.Column="3"
-                        Margin="0,20,12,0"
-                        Padding="14,6"
+                <Button Margin="0,0,8,0"
                         Content="Refresh Devices"
                         Command="{Binding RefreshDevicesCommand}" />
 
-                <Button Grid.Column="4"
-                        Margin="0,20,0,0"
-                        Padding="14,6"
-                        Content="Restart Audio"
+                <Button Content="Restart Audio"
                         Command="{Binding RestartAudioCommand}" />
+            </StackPanel>
+        </Grid>
+
+        <Border Grid.Row="1"
+                Margin="0,0,0,14"
+                Style="{StaticResource PanelBorderStyle}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Margin="0,0,0,14"
+                           Style="{StaticResource SectionTitleTextStyle}"
+                           Text="Devices" />
+
+                <Grid Grid.Row="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0"
+                                Margin="0,0,18,0">
+                        <TextBlock Style="{StaticResource FieldLabelTextStyle}"
+                                   Text="Microphone Input" />
+                        <ComboBox MinWidth="260"
+                                  DisplayMemberPath="DisplayName"
+                                  ItemsSource="{Binding MicrophoneDevices}"
+                                  SelectedItem="{Binding SelectedMicrophone}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1"
+                                Margin="0,0,18,0">
+                        <TextBlock Style="{StaticResource FieldLabelTextStyle}"
+                                   Text="Mixed Output" />
+                        <ComboBox MinWidth="260"
+                                  DisplayMemberPath="DisplayName"
+                                  ItemsSource="{Binding OutputDevices}"
+                                  SelectedItem="{Binding SelectedOutput}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Style="{StaticResource FieldLabelTextStyle}"
+                                   Text="Speaker Monitor" />
+                        <ComboBox MinWidth="260"
+                                  DisplayMemberPath="DisplayName"
+                                  ItemsSource="{Binding OutputDevices}"
+                                  SelectedItem="{Binding SelectedSpeakerOutput}" />
+                        <CheckBox Margin="0,10,0,0"
+                                  Content="Hear clips in speaker monitor"
+                                  IsChecked="{Binding IsSpeakerMonitorEnabled}" />
+                    </StackPanel>
+                </Grid>
             </Grid>
         </Border>
 
-        <Border Grid.Row="1"
-                Margin="0,10,0,10"
-                Padding="10"
-                Background="#FFF5F5F5"
-                BorderBrush="#FFD5D5D5"
-                BorderThickness="1"
-                CornerRadius="4">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock FontWeight="SemiBold"
-                           Text="Engine Status:" />
-                <TextBlock Margin="8,0,0,0"
-                           Text="{Binding EngineStatus}" />
-            </StackPanel>
+        <Border Grid.Row="2"
+                Margin="0,0,0,14"
+                Style="{StaticResource PanelBorderStyle}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Margin="0,0,0,14"
+                           Style="{StaticResource SectionTitleTextStyle}"
+                           Text="Mixer" />
+
+                <Grid Grid.Row="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0"
+                                Margin="0,0,24,0">
+                        <TextBlock Style="{StaticResource FieldLabelTextStyle}"
+                                   Text="Microphone Volume" />
+                        <DockPanel LastChildFill="True">
+                            <TextBlock DockPanel.Dock="Right"
+                                       Width="56"
+                                       Margin="10,0,0,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource Brush.Subtext1}"
+                                       Text="{Binding MicrophoneVolumePercent, StringFormat={}{0:F0}%}"
+                                       TextAlignment="Right" />
+                            <Slider Minimum="0"
+                                    Maximum="300"
+                                    Value="{Binding MicrophoneVolumePercent}" />
+                        </DockPanel>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1"
+                                Margin="0,0,24,0">
+                        <TextBlock Style="{StaticResource FieldLabelTextStyle}"
+                                   Text="Soundboard Volume" />
+                        <DockPanel LastChildFill="True">
+                            <TextBlock DockPanel.Dock="Right"
+                                       Width="56"
+                                       Margin="10,0,0,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource Brush.Subtext1}"
+                                       Text="{Binding SoundboardVolumePercent, StringFormat={}{0:F0}%}"
+                                       TextAlignment="Right" />
+                            <Slider Minimum="0"
+                                    Maximum="100"
+                                    Value="{Binding SoundboardVolumePercent}" />
+                        </DockPanel>
+                    </StackPanel>
+
+                    <CheckBox Grid.Column="2"
+                              Margin="0,22,18,0"
+                              VerticalAlignment="Center"
+                              Content="Mute Microphone"
+                              IsChecked="{Binding IsMicrophoneMuted}" />
+
+                    <Button Grid.Column="3"
+                            Margin="0,16,0,0"
+                            VerticalAlignment="Center"
+                            Command="{Binding StopAllCommand}"
+                            Content="Stop All"
+                            Style="{StaticResource DangerButtonStyle}" />
+                </Grid>
+            </Grid>
         </Border>
 
-        <GroupBox Grid.Row="2"
-                  Header="Clips"
-                  Padding="8">
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Top"
-                            Margin="0,0,0,8"
-                            Orientation="Horizontal">
-                    <Button Margin="0,0,8,0"
-                            Padding="14,6"
-                            Content="Add Clips"
-                            Command="{Binding AddClipsCommand}" />
-                    <Button Margin="0,0,8,0"
-                            Padding="14,6"
-                            Content="Play Selected"
-                            Command="{Binding PlaySelectedClipCommand}" />
-                    <Button Margin="0,0,8,0"
-                            Padding="14,6"
-                            Content="Remove Selected"
-                            Command="{Binding RemoveSelectedClipCommand}" />
-                </StackPanel>
+        <Border Grid.Row="3"
+                Style="{StaticResource PanelBorderStyle}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
-                <DataGrid ItemsSource="{Binding Clips}"
-                          SelectedItem="{Binding SelectedClip}"
+                <DockPanel Margin="0,0,0,12"
+                           LastChildFill="False">
+                    <TextBlock DockPanel.Dock="Left"
+                               VerticalAlignment="Center"
+                               Style="{StaticResource SectionTitleTextStyle}"
+                               Text="Clips" />
+
+                    <StackPanel DockPanel.Dock="Right"
+                                Orientation="Horizontal">
+                        <Button Margin="0,0,8,0"
+                                Command="{Binding AddClipsCommand}"
+                                Content="Add Clips"
+                                Style="{StaticResource AccentButtonStyle}" />
+                        <Button Margin="0,0,8,0"
+                                Command="{Binding PlaySelectedClipCommand}"
+                                Content="Play Selected" />
+                        <Button Command="{Binding RemoveSelectedClipCommand}"
+                                Content="Remove Selected" />
+                    </StackPanel>
+                </DockPanel>
+
+                <DataGrid Grid.Row="1"
+                          AlternationCount="2"
                           AutoGenerateColumns="False"
                           CanUserAddRows="False"
                           CanUserDeleteRows="False"
+                          CanUserResizeColumns="False"
                           HeadersVisibility="Column"
                           IsReadOnly="False"
+                          ItemsSource="{Binding Clips}"
+                          SelectedItem="{Binding SelectedClip}"
                           SelectionMode="Single">
                     <DataGrid.RowStyle>
-                        <Style TargetType="DataGridRow">
+                        <Style TargetType="{x:Type DataGridRow}">
+                            <Setter Property="Background"
+                                    Value="{StaticResource Brush.Mantle}" />
+                            <Setter Property="Foreground"
+                                    Value="{StaticResource Brush.Text}" />
+                            <Setter Property="SnapsToDevicePixels"
+                                    Value="True" />
                             <Style.Triggers>
+                                <Trigger Property="IsMouseOver"
+                                         Value="True">
+                                    <Setter Property="Background"
+                                            Value="{StaticResource Brush.Surface0}" />
+                                </Trigger>
+                                <Trigger Property="IsSelected"
+                                         Value="True">
+                                    <Setter Property="Background"
+                                            Value="{StaticResource Brush.Selection}" />
+                                    <Setter Property="Foreground"
+                                            Value="{StaticResource Brush.Rosewater}" />
+                                </Trigger>
                                 <DataTrigger Binding="{Binding IsAvailable}"
                                              Value="False">
                                     <Setter Property="Background"
-                                            Value="#FFFBE4E4" />
+                                            Value="#26F38BA8" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -140,24 +260,32 @@
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Label"
                                             Binding="{Binding DisplayName, UpdateSourceTrigger=LostFocus}"
-                                            Width="160" />
+                                            ElementStyle="{StaticResource DataGridTextElementStyle}"
+                                            EditingElementStyle="{StaticResource DataGridEditingTextBoxStyle}"
+                                            Width="170" />
                         <DataGridTextColumn Header="Source File"
                                             Binding="{Binding SourcePath}"
+                                            ElementStyle="{StaticResource DataGridTextElementStyle}"
                                             IsReadOnly="True"
                                             Width="*" />
                         <DataGridTextColumn Header="File Status"
                                             Binding="{Binding AvailabilityText}"
+                                            ElementStyle="{StaticResource DataGridTextElementStyle}"
                                             IsReadOnly="True"
                                             Width="140" />
                         <DataGridTemplateColumn Header="Clip Volume"
                                                 Width="170">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <DockPanel>
+                                    <DockPanel Margin="10,0"
+                                               LastChildFill="True">
                                         <TextBlock DockPanel.Dock="Right"
+                                                   Width="48"
                                                    Margin="8,0,0,0"
                                                    VerticalAlignment="Center"
-                                                   Text="{Binding VolumePercent, StringFormat={}{0:F0}%}" />
+                                                   Foreground="{StaticResource Brush.Subtext1}"
+                                                   Text="{Binding VolumePercent, StringFormat={}{0:F0}%}"
+                                                   TextAlignment="Right" />
                                         <Slider Minimum="0"
                                                 Maximum="100"
                                                 TickFrequency="5"
@@ -168,110 +296,75 @@
                         </DataGridTemplateColumn>
                         <DataGridTextColumn Header="Hotkey"
                                             Binding="{Binding HotkeyText, UpdateSourceTrigger=LostFocus}"
+                                            ElementStyle="{StaticResource DataGridTextElementStyle}"
+                                            EditingElementStyle="{StaticResource DataGridEditingTextBoxStyle}"
                                             Width="120" />
                         <DataGridTextColumn Header="Hotkey Status"
                                             Binding="{Binding HotkeyStatus}"
+                                            ElementStyle="{StaticResource DataGridTextElementStyle}"
                                             IsReadOnly="True"
                                             Width="150" />
-                        <DataGridTemplateColumn Header="Play"
+                        <DataGridTemplateColumn Header=""
                                                 Width="70">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <Button Padding="8,2"
+                                    <Button Command="{Binding DataContext.PlayClipCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}"
                                             Content="Play"
-                                            Command="{Binding DataContext.PlayClipCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="{Binding}" />
+                                            Style="{StaticResource DataGridActionButtonStyle}" />
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridTemplateColumn Header="Remove"
+                        <DataGridTemplateColumn Header=""
                                                 Width="85">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <Button Padding="8,2"
+                                    <Button Command="{Binding DataContext.RemoveClipCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}"
                                             Content="Remove"
-                                            Command="{Binding DataContext.RemoveClipCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="{Binding}" />
+                                            Style="{StaticResource DataGridActionButtonStyle}" />
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
                     </DataGrid.Columns>
                 </DataGrid>
-            </DockPanel>
-        </GroupBox>
-
-        <Border Grid.Row="3"
-                Margin="0,10,0,10"
-                Padding="10"
-                BorderBrush="#FFBDBDBD"
-                BorderThickness="1"
-                CornerRadius="4">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <StackPanel Grid.Column="0"
-                            Margin="0,0,18,0">
-                    <TextBlock FontWeight="SemiBold"
-                               Text="Microphone Volume" />
-                    <DockPanel>
-                        <TextBlock DockPanel.Dock="Right"
-                                   Margin="8,0,0,0"
-                                   VerticalAlignment="Center"
-                                   Text="{Binding MicrophoneVolumePercent, StringFormat={}{0:F0}%}" />
-                        <Slider Minimum="0"
-                                Maximum="300"
-                                Value="{Binding MicrophoneVolumePercent}" />
-                    </DockPanel>
-                </StackPanel>
-
-                <StackPanel Grid.Column="1"
-                            Margin="0,0,18,0">
-                    <TextBlock FontWeight="SemiBold"
-                               Text="Soundboard Volume" />
-                    <DockPanel>
-                        <TextBlock DockPanel.Dock="Right"
-                                   Margin="8,0,0,0"
-                                   VerticalAlignment="Center"
-                                   Text="{Binding SoundboardVolumePercent, StringFormat={}{0:F0}%}" />
-                        <Slider Minimum="0"
-                                Maximum="100"
-                                Value="{Binding SoundboardVolumePercent}" />
-                    </DockPanel>
-                </StackPanel>
-
-                <CheckBox Grid.Column="2"
-                          Margin="0,18,18,0"
-                          VerticalAlignment="Center"
-                          Content="Mute Microphone"
-                          IsChecked="{Binding IsMicrophoneMuted}" />
-
-                <Button Grid.Column="3"
-                        Margin="0,12,0,0"
-                        Padding="14,6"
-                        VerticalAlignment="Center"
-                        Content="Stop All"
-                        Command="{Binding StopAllCommand}" />
             </Grid>
         </Border>
 
-        <GroupBox Grid.Row="4"
-                  Header="Log"
-                  Padding="8">
-            <ListBox ItemsSource="{Binding LogEntries}"
-                     FontFamily="Consolas"
-                     HorizontalContentAlignment="Stretch">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding DisplayText}"
-                                   TextWrapping="Wrap" />
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
-        </GroupBox>
+        <Border Grid.Row="4"
+                Margin="0,14,0,0"
+                Style="{StaticResource PanelBorderStyle}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <ToggleButton x:Name="LogToggle"
+                              Margin="0,0,0,12"
+                              HorizontalAlignment="Left"
+                              Content="Logs"
+                              IsChecked="False"
+                              Style="{StaticResource SectionToggleButtonStyle}" />
+
+                <ListBox Grid.Row="1"
+                         Height="110"
+                         BorderThickness="0"
+                         FontFamily="Consolas"
+                         HorizontalContentAlignment="Stretch"
+                         ItemsSource="{Binding LogEntries}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Hidden"
+                         Visibility="{Binding IsChecked, ElementName=LogToggle, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Foreground="{StaticResource Brush.Subtext1}"
+                                       Text="{Binding DisplayText}"
+                                       TextWrapping="Wrap" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+        </Border>
     </Grid>
 </Window>
