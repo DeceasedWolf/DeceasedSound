@@ -93,13 +93,17 @@ public partial class MainWindow : Window
 
     private ContextMenu BuildTrayMenu()
     {
-        var menu = new ContextMenu();
+        var menu = new ContextMenu
+        {
+            Style = (Style)FindResource(typeof(ContextMenu))
+        };
+        var menuItemStyle = (Style)FindResource(typeof(MenuItem));
 
-        var openItem = new MenuItem { Header = "Open" };
+        var openItem = new MenuItem { Header = "Open", Style = menuItemStyle };
         openItem.Click += (_, _) => RestoreFromTray();
         menu.Items.Add(openItem);
 
-        var exitItem = new MenuItem { Header = "Exit" };
+        var exitItem = new MenuItem { Header = "Exit", Style = menuItemStyle };
         exitItem.Click += (_, _) => ExitFromTray();
         menu.Items.Add(exitItem);
 
