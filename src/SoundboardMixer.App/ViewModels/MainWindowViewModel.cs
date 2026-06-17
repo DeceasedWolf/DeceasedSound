@@ -20,6 +20,7 @@ internal sealed class MainWindowViewModel : ObservableObject
     private readonly IAudioEngineService _audioEngineService;
     private readonly IGlobalHotkeyService _globalHotkeyService;
     private readonly ILogService _logService;
+    private readonly Dispatcher _uiDispatcher;
     private readonly DispatcherTimer _saveTimer;
 
     private AudioDeviceInfo? _selectedMicrophone;
@@ -50,6 +51,7 @@ internal sealed class MainWindowViewModel : ObservableObject
         _audioEngineService = audioEngineService;
         _globalHotkeyService = globalHotkeyService;
         _logService = logService;
+        _uiDispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
 
         _microphoneVolumePercent = settings.MicrophoneVolume * 100.0;
         _soundboardVolumePercent = settings.SoundboardVolume * 100.0;
@@ -69,7 +71,7 @@ internal sealed class MainWindowViewModel : ObservableObject
         _globalHotkeyService.HotkeyPressed += OnHotkeyPressed;
         _logService.EntryLogged += OnLogEntryLogged;
 
-        _saveTimer = new DispatcherTimer(DispatcherPriority.Background)
+        _saveTimer = new DispatcherTimer(DispatcherPriority.Background, _uiDispatcher)
         {
             Interval = TimeSpan.FromMilliseconds(500)
         };
@@ -235,14 +237,18 @@ internal sealed class MainWindowViewModel : ObservableObject
         window.Width = windowSettings.Width > 0 ? windowSettings.Width : 1180;
         window.Height = windowSettings.Height > 0 ? windowSettings.Height : 760;
 
-        if (windowSettings.Left.HasValue)
+        if (windowSettings.Left.HasValue && windowSettings.Top.HasValue)
         {
-            window.Left = windowSettings.Left.Value;
-        }
-
-        if (windowSettings.Top.HasValue)
-        {
-            window.Top = windowSettings.Top.Value;
+            var savedBounds = new Rect(windowSettings.Left.Value, windowSettings.Top.Value, window.Width, window.Height);
+            if (IsWindowPlacementVisible(savedBounds))
+            {
+                window.Left = windowSettings.Left.Value;
+                window.Top = windowSettings.Top.Value;
+            }
+            else
+            {
+                _logService.Warning("Saved window position is outside the current desktop. Using the default startup position.");
+            }
         }
 
         if (windowSettings.IsMaximized)
@@ -273,16 +279,38 @@ internal sealed class MainWindowViewModel : ObservableObject
         await SaveSettingsAsync().ConfigureAwait(false);
     }
 
-    public async Task ShutdownAsync()
+    public Task ShutdownAsync()
     {
+        VerifyUiAccess();
         _saveTimer.Stop();
-        await SaveSettingsAsync().ConfigureAwait(false);
+        _saveTimer.Tick -= OnSaveTimerTick;
+
+        AppSettings? snapshot = null;
+        try
+        {
+            snapshot = BuildSettingsSnapshot();
+            ApplySettingsSnapshot(snapshot);
+        }
+        catch (Exception exception)
+        {
+            _logService.Error("Failed to capture settings during shutdown.", exception);
+        }
+
+        _globalHotkeyService.HotkeyPressed -= OnHotkeyPressed;
+
+        try
+        {
+            _audioEngineService.Stop();
+        }
+        catch (Exception exception)
+        {
+            _logService.Error("Failed to stop the audio engine during shutdown.", exception);
+        }
 
         _audioEngineService.StatusChanged -= OnAudioEngineStatusChanged;
-        _globalHotkeyService.HotkeyPressed -= OnHotkeyPressed;
         _logService.EntryLogged -= OnLogEntryLogged;
 
-        _audioEngineService.Stop();
+        return snapshot is null ? Task.CompletedTask : _settingsService.SaveAsync(snapshot);
     }
 
     private async Task LoadInitialClipsAsync()
@@ -395,45 +423,53 @@ internal sealed class MainWindowViewModel : ObservableObject
 
     private void RefreshDevices()
     {
-        var preferredMicrophoneId = SelectedMicrophone?.Id ?? _settings.SelectedMicrophoneId;
-        var preferredOutputId = SelectedOutput?.Id ?? _settings.SelectedOutputDeviceId;
-        var preferredSpeakerId = SelectedSpeakerOutput?.Id ?? _settings.SelectedSpeakerDeviceId;
-
-        var microphones = _audioEngineService.GetCaptureDevices();
-        var outputs = _audioEngineService.GetRenderDevices();
-
-        _isRefreshingDevices = true;
-
         try
         {
-            ReplaceCollection(MicrophoneDevices, microphones);
-            ReplaceCollection(OutputDevices, outputs);
+            var preferredMicrophoneId = SelectedMicrophone?.Id ?? _settings.SelectedMicrophoneId;
+            var preferredOutputId = SelectedOutput?.Id ?? _settings.SelectedOutputDeviceId;
+            var preferredSpeakerId = SelectedSpeakerOutput?.Id ?? _settings.SelectedSpeakerDeviceId;
 
-            SelectedMicrophone = ResolveDeviceSelection(
-                MicrophoneDevices,
-                preferredMicrophoneId,
-                "microphone");
+            var microphones = _audioEngineService.GetCaptureDevices();
+            var outputs = _audioEngineService.GetRenderDevices();
 
-            SelectedOutput = ResolveDeviceSelection(
-                OutputDevices,
-                preferredOutputId,
-                "mixed output");
+            _isRefreshingDevices = true;
 
-            SelectedSpeakerOutput = ResolveDeviceSelection(
-                OutputDevices,
-                preferredSpeakerId,
-                "speaker monitor",
-                SelectedOutput?.Id);
+            try
+            {
+                ReplaceCollection(MicrophoneDevices, microphones);
+                ReplaceCollection(OutputDevices, outputs);
+
+                SelectedMicrophone = ResolveDeviceSelection(
+                    MicrophoneDevices,
+                    preferredMicrophoneId,
+                    "microphone");
+
+                SelectedOutput = ResolveDeviceSelection(
+                    OutputDevices,
+                    preferredOutputId,
+                    "mixed output");
+
+                SelectedSpeakerOutput = ResolveDeviceSelection(
+                    OutputDevices,
+                    preferredSpeakerId,
+                    "speaker monitor",
+                    SelectedOutput?.Id);
+            }
+            finally
+            {
+                _isRefreshingDevices = false;
+            }
+
+            if (!_isInitializing)
+            {
+                RestartAudio();
+                ScheduleSave();
+            }
         }
-        finally
+        catch (Exception exception)
         {
-            _isRefreshingDevices = false;
-        }
-
-        if (!_isInitializing)
-        {
-            RestartAudio();
-            ScheduleSave();
+            EngineStatus = "Audio device refresh failed. See the log for details.";
+            _logService.Error("Failed to refresh audio devices.", exception);
         }
     }
 
@@ -469,12 +505,20 @@ internal sealed class MainWindowViewModel : ObservableObject
 
     private void RestartAudio()
     {
-        ApplyMixSettings();
-        _audioEngineService.Start(
-            SelectedMicrophone?.Id,
-            SelectedOutput?.Id,
-            SelectedSpeakerOutput?.Id,
-            IsSpeakerMonitorEnabled);
+        try
+        {
+            ApplyMixSettings();
+            _audioEngineService.Start(
+                SelectedMicrophone?.Id,
+                SelectedOutput?.Id,
+                SelectedSpeakerOutput?.Id,
+                IsSpeakerMonitorEnabled);
+        }
+        catch (Exception exception)
+        {
+            EngineStatus = "Audio restart failed. See the log for details.";
+            _logService.Error("Failed to restart audio.", exception);
+        }
     }
 
     private void ApplyMixSettings()
@@ -536,7 +580,15 @@ internal sealed class MainWindowViewModel : ObservableObject
     private async void OnSaveTimerTick(object? sender, EventArgs eventArgs)
     {
         _saveTimer.Stop();
-        await SaveSettingsAsync().ConfigureAwait(false);
+
+        try
+        {
+            await SaveSettingsAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            _logService.Error("Failed to save delayed settings update.", exception);
+        }
     }
 
     private async Task SaveSettingsAsync()
@@ -583,19 +635,19 @@ internal sealed class MainWindowViewModel : ObservableObject
 
     private void OnAudioEngineStatusChanged(object? sender, string status)
     {
-        DispatchToUi(() => EngineStatus = status);
+        DispatchToUi(() => EngineStatus = status, "Failed to update audio status.");
     }
 
     private void OnHotkeyPressed(object? sender, string clipId)
     {
-        DispatchToUi(async () =>
+        DispatchToUiAsync(async () =>
         {
             var clip = Clips.FirstOrDefault(candidate => candidate.Id == clipId);
             if (clip is not null)
             {
                 await PlayClipAsync(clip);
             }
-        });
+        }, $"Failed to play hotkey clip '{clipId}'.");
     }
 
     private void OnLogEntryLogged(object? sender, LogEntry entry)
@@ -608,7 +660,7 @@ internal sealed class MainWindowViewModel : ObservableObject
             {
                 LogEntries.RemoveAt(LogEntries.Count - 1);
             }
-        });
+        }, failureMessage: null);
     }
 
     private static void ReplaceCollection<T>(ObservableCollection<T> collection, IEnumerable<T> items)
@@ -621,15 +673,99 @@ internal sealed class MainWindowViewModel : ObservableObject
         }
     }
 
-    private static void DispatchToUi(Action action)
+    private void VerifyUiAccess()
     {
-        var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.CheckAccess())
+        if (!_uiDispatcher.CheckAccess())
         {
-            action();
+            throw new InvalidOperationException("MainWindowViewModel shutdown must run on the UI dispatcher.");
+        }
+    }
+
+    private void DispatchToUi(Action action, string? failureMessage)
+    {
+        DispatchToUiAsync(
+            () =>
+            {
+                action();
+                return Task.CompletedTask;
+            },
+            failureMessage);
+    }
+
+    private void DispatchToUiAsync(Func<Task> action, string? failureMessage)
+    {
+        if (_uiDispatcher.HasShutdownStarted || _uiDispatcher.HasShutdownFinished)
+        {
             return;
         }
 
-        dispatcher.BeginInvoke(action);
+        if (_uiDispatcher.CheckAccess())
+        {
+            _ = ExecuteUiActionAsync(action, failureMessage);
+            return;
+        }
+
+        try
+        {
+            _uiDispatcher.BeginInvoke(
+                new Action(() => _ = ExecuteUiActionAsync(action, failureMessage)),
+                DispatcherPriority.Background);
+        }
+        catch (InvalidOperationException)
+        {
+            // The dispatcher is already shutting down.
+        }
+        catch (TaskCanceledException)
+        {
+            // The dispatcher is already shutting down.
+        }
+    }
+
+    private static bool IsWindowPlacementVisible(Rect bounds)
+    {
+        if (!IsFinite(bounds.Left) ||
+            !IsFinite(bounds.Top) ||
+            !IsFinite(bounds.Width) ||
+            !IsFinite(bounds.Height) ||
+            bounds.Width <= 0 ||
+            bounds.Height <= 0)
+        {
+            return false;
+        }
+
+        var desktopBounds = new Rect(
+            SystemParameters.VirtualScreenLeft,
+            SystemParameters.VirtualScreenTop,
+            SystemParameters.VirtualScreenWidth,
+            SystemParameters.VirtualScreenHeight);
+
+        var visibleBounds = Rect.Intersect(bounds, desktopBounds);
+        if (visibleBounds.IsEmpty)
+        {
+            return false;
+        }
+
+        return visibleBounds.Width >= Math.Min(80.0, bounds.Width) &&
+               visibleBounds.Height >= Math.Min(80.0, bounds.Height);
+    }
+
+    private static bool IsFinite(double value)
+    {
+        return !double.IsNaN(value) && !double.IsInfinity(value);
+    }
+
+    private async Task ExecuteUiActionAsync(Func<Task> action, string? failureMessage)
+    {
+        try
+        {
+            await action();
+        }
+        catch (Exception exception)
+        {
+            if (!string.IsNullOrWhiteSpace(failureMessage))
+            {
+                _logService.Error(failureMessage, exception);
+            }
+        }
     }
 }

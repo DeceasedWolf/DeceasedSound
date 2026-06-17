@@ -14,19 +14,29 @@ public sealed class SettingsService : ISettingsService
 
     private readonly SemaphoreSlim _saveGate = new(1, 1);
     private readonly ILogService _logService;
+    private readonly string _settingsPath;
 
     public SettingsService(ILogService logService)
+        : this(logService, AppPaths.SettingsFilePath)
     {
-        _logService = logService;
     }
 
-    public string SettingsPath => AppPaths.SettingsFilePath;
+    internal SettingsService(ILogService logService, string settingsPath)
+    {
+        ArgumentNullException.ThrowIfNull(logService);
+        ArgumentException.ThrowIfNullOrWhiteSpace(settingsPath);
+
+        _logService = logService;
+        _settingsPath = settingsPath;
+    }
+
+    public string SettingsPath => _settingsPath;
 
     public async Task<AppSettings> LoadAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            Directory.CreateDirectory(AppPaths.AppDataDirectory);
+            EnsureSettingsDirectory();
 
             if (!File.Exists(SettingsPath))
             {
@@ -49,7 +59,7 @@ public sealed class SettingsService : ISettingsService
     public async Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default)
     {
         settings = Normalize(settings);
-        Directory.CreateDirectory(AppPaths.AppDataDirectory);
+        EnsureSettingsDirectory();
         await _saveGate.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
@@ -91,5 +101,14 @@ public sealed class SettingsService : ISettingsService
         }
 
         return settings;
+    }
+
+    private void EnsureSettingsDirectory()
+    {
+        var directory = Path.GetDirectoryName(SettingsPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
     }
 }

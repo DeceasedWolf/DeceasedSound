@@ -61,16 +61,44 @@ public partial class App : Application
     {
         try
         {
-            _mainWindowViewModel?.ShutdownAsync().GetAwaiter().GetResult();
+            ShutdownMainWindowViewModel();
         }
         catch
         {
             // The app is exiting anyway.
         }
-
-        _hotkeyService?.Dispose();
-        _audioEngineService?.Dispose();
+        finally
+        {
+            TryDispose(_hotkeyService);
+            TryDispose(_audioEngineService);
+        }
 
         base.OnExit(eventArgs);
+    }
+
+    private void ShutdownMainWindowViewModel()
+    {
+        if (_mainWindowViewModel is null)
+        {
+            return;
+        }
+
+        var shutdownTask = Dispatcher.CheckAccess()
+            ? _mainWindowViewModel.ShutdownAsync()
+            : Dispatcher.Invoke(() => _mainWindowViewModel.ShutdownAsync());
+
+        shutdownTask.GetAwaiter().GetResult();
+    }
+
+    private static void TryDispose(IDisposable? disposable)
+    {
+        try
+        {
+            disposable?.Dispose();
+        }
+        catch
+        {
+            // Best-effort cleanup during application exit.
+        }
     }
 }
