@@ -36,21 +36,6 @@
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
                         Orientation="Horizontal">
-                <Border Margin="0,0,10,0"
-                        Style="{StaticResource StatusBorderStyle}">
-                    <StackPanel VerticalAlignment="Center"
-                                Orientation="Horizontal">
-                        <TextBlock Margin="0,0,8,0"
-                                   VerticalAlignment="Center"
-                                   FontWeight="SemiBold"
-                                   Foreground="{StaticResource Brush.Subtext0}"
-                                   Text="Engine" />
-                        <TextBlock VerticalAlignment="Center"
-                                   Foreground="{StaticResource Brush.Blue}"
-                                   Text="{Binding EngineStatus}" />
-                    </StackPanel>
-                </Border>
-
                 <Button Margin="0,0,8,0"
                         Content="Refresh Devices"
                         Command="{Binding RefreshDevicesCommand}" />
@@ -69,6 +54,7 @@
                 Style="{StaticResource PanelBorderStyle}">
             <Grid>
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
@@ -116,6 +102,20 @@
                                   IsChecked="{Binding IsSpeakerMonitorEnabled}" />
                     </StackPanel>
                 </Grid>
+
+                <StackPanel Grid.Row="2"
+                            Margin="0,14,0,0"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal">
+                    <TextBlock Margin="0,0,8,0"
+                               VerticalAlignment="Center"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource Brush.Subtext0}"
+                               Text="Engine" />
+                    <TextBlock VerticalAlignment="Center"
+                               Foreground="{StaticResource Brush.Blue}"
+                               Text="{Binding EngineStatus}" />
+                </StackPanel>
             </Grid>
         </Border>
 
