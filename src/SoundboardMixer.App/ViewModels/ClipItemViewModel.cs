@@ -12,6 +12,8 @@ internal sealed class ClipItemViewModel : ObservableObject
     private string _hotkeyStatus = string.Empty;
     private string _availabilityText = "Not loaded";
     private bool _isAvailable;
+    private bool _isPlaying;
+    private double _playbackProgress;
     private double _volumePercent;
 
     public ClipItemViewModel(
@@ -94,6 +96,18 @@ internal sealed class ClipItemViewModel : ObservableObject
         private set => SetProperty(ref _isAvailable, value);
     }
 
+    public bool IsPlaying
+    {
+        get => _isPlaying;
+        private set => SetProperty(ref _isPlaying, value);
+    }
+
+    public double PlaybackProgress
+    {
+        get => _playbackProgress;
+        private set => SetProperty(ref _playbackProgress, value);
+    }
+
     internal LoadedClip? LoadedClip { get; private set; }
 
     public void ApplyLoadResult(LoadedClip? loadedClip, bool isAvailable, string availabilityText)
@@ -106,6 +120,23 @@ internal sealed class ClipItemViewModel : ObservableObject
     public void SetHotkeyStatus(string status)
     {
         HotkeyStatus = status;
+    }
+
+    public void StartPlayback()
+    {
+        PlaybackProgress = 0.0;
+        IsPlaying = true;
+    }
+
+    public void UpdatePlaybackProgress(double progress)
+    {
+        PlaybackProgress = Math.Clamp(progress, 0.0, 1.0);
+    }
+
+    public void StopPlayback()
+    {
+        IsPlaying = false;
+        PlaybackProgress = 0.0;
     }
 
     public ClipSettings ToSettings()

@@ -210,6 +210,9 @@
                                 Content="Add Clips"
                                 Style="{StaticResource AccentButtonStyle}" />
                         <Button Margin="0,0,8,0"
+                                Command="{Binding OpenClipBrowserCommand}"
+                                Content="Dashboard" />
+                        <Button Margin="0,0,8,0"
                                 Command="{Binding PlaySelectedClipCommand}"
                                 Content="Play Selected" />
                         <Button Command="{Binding RemoveSelectedClipCommand}"
@@ -364,6 +367,98 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1"
+                Grid.RowSpan="4"
+                Panel.ZIndex="20"
+                Style="{StaticResource PanelBorderStyle}"
+                Visibility="{Binding IsClipBrowserOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <DockPanel Margin="0,0,0,14"
+                           LastChildFill="False">
+                    <StackPanel DockPanel.Dock="Left">
+                        <TextBlock Style="{StaticResource PageTitleTextStyle}"
+                                   Text="Sound Browser" />
+                        <TextBlock Margin="0,4,0,0"
+                                   Foreground="{StaticResource Brush.Subtext1}"
+                                   Text="{Binding Clips.Count, StringFormat={}{0} sounds loaded}" />
+                    </StackPanel>
+
+                    <StackPanel DockPanel.Dock="Right"
+                                VerticalAlignment="Top"
+                                Orientation="Horizontal">
+                        <Button Margin="0,0,8,0"
+                                Command="{Binding AddClipsCommand}"
+                                Content="Add Clips"
+                                Style="{StaticResource AccentButtonStyle}" />
+                        <Button Margin="0,0,8,0"
+                                Command="{Binding StopAllCommand}"
+                                Content="Stop All"
+                                Style="{StaticResource DangerButtonStyle}" />
+                        <Button Command="{Binding CloseClipBrowserCommand}"
+                                Content="Close" />
+                    </StackPanel>
+                </DockPanel>
+
+                <Grid Grid.Row="1"
+                      Margin="0,0,0,16">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Margin="0,0,10,0"
+                                   VerticalAlignment="Center"
+                                   Style="{StaticResource FieldLabelTextStyle}"
+                                   Text="Find Sound" />
+                        <TextBox Style="{StaticResource ClipBrowserSearchBoxStyle}"
+                                 Text="{Binding ClipBrowserSearchText, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                </Grid>
+
+                <ScrollViewer Grid.Row="2"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding ClipBrowserClips}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Command="{Binding DataContext.ToggleClipPlaybackCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}"
+                                        Style="{StaticResource SoundTileButtonStyle}"
+                                        ToolTip="{Binding SourcePath}">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="*" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Style="{StaticResource SoundTileTitleTextStyle}"
+                                                   Text="{Binding DisplayName}" />
+
+                                        <DockPanel Grid.Row="1"
+                                                   LastChildFill="True">
+                                            <TextBlock DockPanel.Dock="Right"
+                                                       Margin="8,0,0,0"
+                                                       Foreground="{StaticResource Brush.Subtext0}"
+                                                       Text="{Binding VolumePercent, StringFormat={}{0:F0}%}" />
+                                            <TextBlock Style="{StaticResource SoundTileStatusTextStyle}"
+                                                       Text="{Binding AvailabilityText}" />
+                                        </DockPanel>
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
             </Grid>
         </Border>
     </Grid>

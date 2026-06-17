@@ -201,6 +201,20 @@ public sealed class AudioEngineService : IAudioEngineService
         }
     }
 
+    public void StopClip(LoadedClip clip)
+    {
+        ArgumentNullException.ThrowIfNull(clip);
+
+        lock (_clipCommandLock)
+        {
+            _mixedOutputClips.Remove(clip);
+            _speakerMonitorClips.Remove(clip);
+        }
+
+        _mixedOutputClips.WaitForMixers();
+        _speakerMonitorClips.WaitForMixers();
+    }
+
     public void StopAllClips()
     {
         lock (_clipCommandLock)
@@ -877,6 +891,18 @@ public sealed class AudioEngineService : IAudioEngineService
             {
                 _activeClips.Clear();
                 if (_activeMixers == 0)
+                {
+                    _mixersIdle.Set();
+                }
+            }
+        }
+
+        public void Remove(LoadedClip clip)
+        {
+            lock (_gate)
+            {
+                _activeClips.RemoveAll(activeClip => ReferenceEquals(activeClip.Clip, clip));
+                if (_activeClips.Count == 0 && _activeMixers == 0)
                 {
                     _mixersIdle.Set();
                 }

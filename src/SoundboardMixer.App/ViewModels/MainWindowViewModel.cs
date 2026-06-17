@@ -1,6 +1,9 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Data;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -22,18 +25,23 @@ internal sealed class MainWindowViewModel : ObservableObject
     private readonly ILogService _logService;
     private readonly Dispatcher _uiDispatcher;
     private readonly DispatcherTimer _saveTimer;
+    private readonly DispatcherTimer _playbackTimer;
+    private readonly Dictionary<string, ClipPlaybackUiState> _playbackStates = [];
 
     private AudioDeviceInfo? _selectedMicrophone;
     private AudioDeviceInfo? _selectedOutput;
     private AudioDeviceInfo? _selectedSpeakerOutput;
     private ClipItemViewModel? _selectedClip;
     private string _engineStatus = "Initializing audio...";
+    private string _clipBrowserSearchText = string.Empty;
     private double _microphoneVolumePercent;
     private double _soundboardVolumePercent;
     private bool _isMicrophoneMuted;
     private bool _isSpeakerMonitorEnabled;
+    private bool _isClipBrowserOpen;
     private bool _isInitializing;
     private bool _isRefreshingDevices;
+    private readonly CollectionViewSource _clipBrowserViewSource;
 
     public MainWindowViewModel(
         AppSettings settings,
@@ -57,15 +65,20 @@ internal sealed class MainWindowViewModel : ObservableObject
         _soundboardVolumePercent = settings.SoundboardVolume * 100.0;
         _isMicrophoneMuted = settings.IsMicrophoneMuted;
         _isSpeakerMonitorEnabled = settings.IsSpeakerMonitorEnabled;
+        _clipBrowserViewSource = new CollectionViewSource { Source = Clips };
+        _clipBrowserViewSource.Filter += OnClipBrowserFilter;
 
         RefreshDevicesCommand = new RelayCommand(RefreshDevices);
         RestartAudioCommand = new RelayCommand(RestartAudio);
         AddClipsCommand = new AsyncRelayCommand(AddClipsAsync);
         StopAllCommand = new RelayCommand(StopAllClips);
+        OpenClipBrowserCommand = new RelayCommand(() => IsClipBrowserOpen = true);
+        CloseClipBrowserCommand = new RelayCommand(() => IsClipBrowserOpen = false);
         RemoveSelectedClipCommand = new RelayCommand(RemoveSelectedClip, () => SelectedClip is not null);
         PlaySelectedClipCommand = new AsyncRelayCommand(PlaySelectedClipAsync, () => SelectedClip is not null);
         RemoveClipCommand = new RelayCommand<ClipItemViewModel?>(RemoveClip);
         PlayClipCommand = new AsyncRelayCommand<ClipItemViewModel?>(PlayClipAsync);
+        ToggleClipPlaybackCommand = new AsyncRelayCommand<ClipItemViewModel?>(ToggleClipPlaybackAsync);
 
         _audioEngineService.StatusChanged += OnAudioEngineStatusChanged;
         _globalHotkeyService.HotkeyPressed += OnHotkeyPressed;
@@ -76,6 +89,12 @@ internal sealed class MainWindowViewModel : ObservableObject
             Interval = TimeSpan.FromMilliseconds(500)
         };
         _saveTimer.Tick += OnSaveTimerTick;
+
+        _playbackTimer = new DispatcherTimer(DispatcherPriority.Render, _uiDispatcher)
+        {
+            Interval = TimeSpan.FromMilliseconds(33)
+        };
+        _playbackTimer.Tick += OnPlaybackTimerTick;
     }
 
     public ObservableCollection<AudioDeviceInfo> MicrophoneDevices { get; } = [];
@@ -83,6 +102,8 @@ internal sealed class MainWindowViewModel : ObservableObject
     public ObservableCollection<AudioDeviceInfo> OutputDevices { get; } = [];
 
     public ObservableCollection<ClipItemViewModel> Clips { get; } = [];
+
+    public ICollectionView ClipBrowserClips => _clipBrowserViewSource.View;
 
     public ObservableCollection<LogEntry> LogEntries { get; } = [];
 
@@ -94,6 +115,10 @@ internal sealed class MainWindowViewModel : ObservableObject
 
     public RelayCommand StopAllCommand { get; }
 
+    public RelayCommand OpenClipBrowserCommand { get; }
+
+    public RelayCommand CloseClipBrowserCommand { get; }
+
     public RelayCommand RemoveSelectedClipCommand { get; }
 
     public AsyncRelayCommand PlaySelectedClipCommand { get; }
@@ -101,6 +126,8 @@ internal sealed class MainWindowViewModel : ObservableObject
     public RelayCommand<ClipItemViewModel?> RemoveClipCommand { get; }
 
     public AsyncRelayCommand<ClipItemViewModel?> PlayClipCommand { get; }
+
+    public AsyncRelayCommand<ClipItemViewModel?> ToggleClipPlaybackCommand { get; }
 
     public AudioDeviceInfo? SelectedMicrophone
     {
@@ -155,6 +182,24 @@ internal sealed class MainWindowViewModel : ObservableObject
     {
         get => _engineStatus;
         private set => SetProperty(ref _engineStatus, value);
+    }
+
+    public string ClipBrowserSearchText
+    {
+        get => _clipBrowserSearchText;
+        set
+        {
+            if (SetProperty(ref _clipBrowserSearchText, value ?? string.Empty))
+            {
+                ClipBrowserClips.Refresh();
+            }
+        }
+    }
+
+    public bool IsClipBrowserOpen
+    {
+        get => _isClipBrowserOpen;
+        set => SetProperty(ref _isClipBrowserOpen, value);
     }
 
     public double MicrophoneVolumePercent
@@ -284,6 +329,8 @@ internal sealed class MainWindowViewModel : ObservableObject
         VerifyUiAccess();
         _saveTimer.Stop();
         _saveTimer.Tick -= OnSaveTimerTick;
+        _playbackTimer.Stop();
+        _playbackTimer.Tick -= OnPlaybackTimerTick;
 
         AppSettings? snapshot = null;
         try
@@ -297,6 +344,7 @@ internal sealed class MainWindowViewModel : ObservableObject
         }
 
         _globalHotkeyService.HotkeyPressed -= OnHotkeyPressed;
+        _clipBrowserViewSource.Filter -= OnClipBrowserFilter;
 
         try
         {
@@ -366,6 +414,7 @@ internal sealed class MainWindowViewModel : ObservableObject
     {
         var loadResult = await Task.Run(() => _clipLoaderService.LoadClip(clip.SourcePath));
         clip.ApplyLoadResult(loadResult.Clip, loadResult.IsAvailable, loadResult.AvailabilityText);
+        ClipBrowserClips.Refresh();
     }
 
     private async Task PlaySelectedClipAsync()
@@ -391,7 +440,29 @@ internal sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
+        if (clip.IsPlaying)
+        {
+            StopClipPlayback(clip);
+        }
+
         _audioEngineService.PlayClip(clip.LoadedClip, (float)(clip.VolumePercent / 100.0));
+        StartClipPlayback(clip);
+    }
+
+    private async Task ToggleClipPlaybackAsync(ClipItemViewModel? clip)
+    {
+        if (clip is null)
+        {
+            return;
+        }
+
+        if (clip.IsPlaying)
+        {
+            StopClipPlayback(clip);
+            return;
+        }
+
+        await PlayClipAsync(clip);
     }
 
     private void RemoveSelectedClip()
@@ -406,19 +477,44 @@ internal sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
+        StopClipPlayback(clip);
+
         if (ReferenceEquals(SelectedClip, clip))
         {
             SelectedClip = null;
         }
 
         Clips.Remove(clip);
+        ClipBrowserClips.Refresh();
         ApplyHotkeyBindings();
         ScheduleSave();
+    }
+
+    private void OnClipBrowserFilter(object sender, FilterEventArgs eventArgs)
+    {
+        if (eventArgs.Item is not ClipItemViewModel clip)
+        {
+            eventArgs.Accepted = false;
+            return;
+        }
+
+        var searchText = ClipBrowserSearchText.Trim();
+        if (searchText.Length == 0)
+        {
+            eventArgs.Accepted = true;
+            return;
+        }
+
+        eventArgs.Accepted =
+            clip.DisplayName.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+            clip.SourcePath.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+            clip.AvailabilityText.Contains(searchText, StringComparison.OrdinalIgnoreCase);
     }
 
     private void StopAllClips()
     {
         _audioEngineService.StopAllClips();
+        ClearAllClipPlayback();
     }
 
     private void RefreshDevices()
@@ -507,6 +603,7 @@ internal sealed class MainWindowViewModel : ObservableObject
     {
         try
         {
+            ClearAllClipPlayback();
             ApplyMixSettings();
             _audioEngineService.Start(
                 SelectedMicrophone?.Id,
@@ -563,6 +660,11 @@ internal sealed class MainWindowViewModel : ObservableObject
             ApplyHotkeyBindings();
         }
 
+        if (propertyName == nameof(ClipItemViewModel.DisplayName))
+        {
+            ClipBrowserClips.Refresh();
+        }
+
         ScheduleSave();
     }
 
@@ -589,6 +691,76 @@ internal sealed class MainWindowViewModel : ObservableObject
         {
             _logService.Error("Failed to save delayed settings update.", exception);
         }
+    }
+
+    private void OnPlaybackTimerTick(object? sender, EventArgs eventArgs)
+    {
+        if (_playbackStates.Count == 0)
+        {
+            _playbackTimer.Stop();
+            return;
+        }
+
+        var now = Stopwatch.GetTimestamp();
+        foreach (var state in _playbackStates.Values.ToList())
+        {
+            var elapsedSeconds = (now - state.StartTimestamp) / (double)Stopwatch.Frequency;
+            var progress = state.Duration.TotalSeconds <= 0.0
+                ? 1.0
+                : elapsedSeconds / state.Duration.TotalSeconds;
+
+            if (progress >= 1.0)
+            {
+                ClearClipPlayback(state.Clip);
+                continue;
+            }
+
+            state.Clip.UpdatePlaybackProgress(progress);
+        }
+    }
+
+    private void StartClipPlayback(ClipItemViewModel clip)
+    {
+        var duration = clip.LoadedClip?.Duration ?? TimeSpan.Zero;
+        _playbackStates[clip.Id] = new ClipPlaybackUiState(clip, Stopwatch.GetTimestamp(), duration);
+        clip.StartPlayback();
+
+        if (!_playbackTimer.IsEnabled)
+        {
+            _playbackTimer.Start();
+        }
+    }
+
+    private void StopClipPlayback(ClipItemViewModel clip)
+    {
+        if (clip.LoadedClip is not null)
+        {
+            _audioEngineService.StopClip(clip.LoadedClip);
+        }
+
+        ClearClipPlayback(clip);
+    }
+
+    private void ClearClipPlayback(ClipItemViewModel clip)
+    {
+        _playbackStates.Remove(clip.Id);
+        clip.StopPlayback();
+
+        if (_playbackStates.Count == 0)
+        {
+            _playbackTimer.Stop();
+        }
+    }
+
+    private void ClearAllClipPlayback()
+    {
+        foreach (var state in _playbackStates.Values.ToList())
+        {
+            state.Clip.StopPlayback();
+        }
+
+        _playbackStates.Clear();
+        _playbackTimer.Stop();
     }
 
     private async Task SaveSettingsAsync()
@@ -768,4 +940,9 @@ internal sealed class MainWindowViewModel : ObservableObject
             }
         }
     }
+
+    private sealed record ClipPlaybackUiState(
+        ClipItemViewModel Clip,
+        long StartTimestamp,
+        TimeSpan Duration);
 }

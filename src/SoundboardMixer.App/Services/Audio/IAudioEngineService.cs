@@ -19,6 +19,8 @@ public interface IAudioEngineService : IDisposable
 
     void PlayClip(LoadedClip clip, float volume);
 
+    void StopClip(LoadedClip clip);
+
     void StopAllClips();
 
     void UpdateMixSettings(float microphoneVolume, float soundboardVolume, bool microphoneMuted);
