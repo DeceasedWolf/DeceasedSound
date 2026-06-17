@@ -23,7 +23,8 @@ Do not attempt to create a virtual audio driver.
 - No unnecessary dependencies
 
 ## Architecture preferences
-- Prefer one WPF app project unless a second project is clearly justified
+- Prefer one WPF app project for runtime code unless another runtime project is clearly justified
+- A separate test project is acceptable for automated coverage
 - Keep implementations concrete and simple
 - Persist settings with System.Text.Json
 - Use RegisterHotKey for global hotkeys
@@ -34,6 +35,7 @@ Do not attempt to create a virtual audio driver.
 ## Quality bar
 - Run `dotnet restore`
 - Run `dotnet build`
+- Run `dotnet test`
 - Fix compile errors before finishing
 - Leave the repository in a buildable state
 - Add TODOs only where genuinely necessary

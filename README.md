@@ -31,6 +31,7 @@ That arrangement lets the app mix your live microphone plus sound clips into VB-
 ```powershell
 dotnet restore SoundboardMixer.sln
 dotnet build SoundboardMixer.sln
+dotnet test SoundboardMixer.sln
 ```
 
 ## Using The App
@@ -58,4 +59,4 @@ dotnet build SoundboardMixer.sln
 - The app stores source file paths only. If a clip file moves or is deleted, the UI marks it as missing.
 - Device disconnects are handled without crashing, but you may need to click `Refresh Devices` or `Restart Audio` after a hardware change.
 - The mixer runs internally at 48 kHz stereo float. Output compatibility still depends on the selected playback device and its shared-mode WASAPI support.
-- The app now uses a lower-latency buffering profile, but Discord mic test still adds its own monitoring delay on top of the app's processing path.
+- The audio engine requests low-latency shared-mode WASAPI capture/render and falls back when a device rejects the lower setting. Windows device periods, format conversion, virtual cable latency, and downstream apps such as Discord still affect perceived delay.

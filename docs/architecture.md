@@ -11,6 +11,8 @@ The solution uses a single WPF application project at `src/SoundboardMixer.App/`
 - `Models/`
   Persisted settings and simple data objects shared across the app.
 
+Automated tests live in `tests/SoundboardMixer.App.Tests/`. The extra project is for coverage only; runtime implementation remains in the WPF app project.
+
 The application is composed manually in `App.xaml.cs` without a dependency injection framework.
 
 ## Audio Flow
@@ -19,16 +21,17 @@ The audio pipeline is:
 
 1. Enumerate the selected microphone endpoint and output/render endpoint by WASAPI device ID.
 2. Start `WasapiCapture` for the selected microphone.
-3. Push captured microphone buffers into a `BufferedWaveProvider`.
-4. Convert microphone samples into the internal mix format:
+3. Push captured microphone buffers into a bounded `BufferedWaveProvider`.
+4. Drop stale queued microphone audio only when the queue crosses the configured trim threshold, keeping monitoring latency bounded without treating normal scheduling jitter as a fault.
+5. Convert microphone samples into the internal mix format:
    - 48 kHz
    - 32-bit float
    - stereo
-5. Load each imported clip with `AudioFileReader`, decode it up front, and normalize it into the same internal mix format.
-6. Mix live microphone samples plus all currently active clips inside a single custom `ISampleProvider`.
-7. Apply a simple soft limiter/clamp pass before output.
-8. Send the full mic+clip mix to the selected mixed output device through `WasapiOut`.
-9. Optionally send a second clip-only render stream to a separate speaker/headphone device through another `WasapiOut` instance, controlled by a user-facing enable toggle.
+6. Load each imported clip with `AudioFileReader`, decode it up front, and normalize it into the same internal mix format.
+7. Mix live microphone samples plus all currently active clips inside a single custom `ISampleProvider`.
+8. Apply a simple soft limiter/clamp pass before output.
+9. Send the full mic+clip mix to the selected mixed output device through `WasapiOut`.
+10. Optionally send a second clip-only render stream to a separate speaker/headphone device through another `WasapiOut` instance, controlled by a user-facing enable toggle.
 
 This keeps microphone capture, clip scheduling, mixing, and playback routing in one focused service.
 
@@ -38,9 +41,11 @@ This keeps microphone capture, clip scheduling, mixing, and playback routing in 
 
 - Enumerates capture and render devices.
 - Starts/stops WASAPI microphone capture and render output.
+- Requests a preferred low-latency shared-mode WASAPI profile and falls back when the device rejects it.
 - Mixes live microphone audio with active in-memory clips.
 - Maintains a second clip-only speaker-monitor output when configured.
-- Uses a lower-latency shared-mode capture/render profile than the original scaffold.
+- Bounds stale queued microphone audio with a trim threshold/target so delayed callbacks do not grow into persistent monitoring latency.
+- Clears queued microphone audio while muted so unmuting does not replay stale capture samples.
 - Applies microphone volume, soundboard volume, mute state, and a soft limiter.
 - Raises engine status updates for the UI.
 
