@@ -67,7 +67,6 @@ internal sealed class DeviceOutputWaveProvider : IWaveProvider
         lock (_readLock)
         {
             EnsureSampleBuffer(samplesRequested);
-            Array.Clear(buffer, offset, bytesToWrite);
             samplesRead = Math.Clamp(_source.Read(_sampleBuffer, 0, samplesRequested), 0, samplesRequested);
 
             switch (_encoding)
@@ -87,6 +86,12 @@ internal sealed class DeviceOutputWaveProvider : IWaveProvider
                 case OutputSampleEncoding.Pcm32:
                     WritePcm32(_sampleBuffer, samplesRead, buffer, offset);
                     break;
+            }
+
+            var bytesWritten = samplesRead * _bytesPerSample;
+            if (bytesWritten < bytesToWrite)
+            {
+                Array.Clear(buffer, offset + bytesWritten, bytesToWrite - bytesWritten);
             }
         }
 

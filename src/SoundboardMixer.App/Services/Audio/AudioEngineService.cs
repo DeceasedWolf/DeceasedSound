@@ -9,10 +9,26 @@ public sealed class AudioEngineService : IAudioEngineService
 {
     public const int InternalSampleRate = 48_000;
     public const int InternalChannels = 2;
-    private const int CaptureLatencyMilliseconds = 25;
+    private const int PreferredCaptureLatencyMilliseconds = 10;
+    private const int FallbackCaptureLatencyMilliseconds = 25;
     private const int MicrophoneBufferMilliseconds = 50;
-    private const int EventDrivenRenderLatencyMilliseconds = 25;
+    private const int TargetMicrophoneBufferedMilliseconds = 15;
+    private const int MicrophoneTrimThresholdMilliseconds = 30;
+    private const int PreferredEventDrivenRenderLatencyMilliseconds = 10;
+    private const int FallbackEventDrivenRenderLatencyMilliseconds = 25;
     private const int PollingRenderLatencyMilliseconds = 40;
+    private static readonly int[] CaptureLatencyCandidates =
+    [
+        PreferredCaptureLatencyMilliseconds,
+        FallbackCaptureLatencyMilliseconds
+    ];
+
+    private static readonly int[] EventDrivenRenderLatencyCandidates =
+    [
+        PreferredEventDrivenRenderLatencyMilliseconds,
+        FallbackEventDrivenRenderLatencyMilliseconds
+    ];
+
     private static readonly TimeSpan RealtimeWarningInterval = TimeSpan.FromSeconds(5);
 
     private readonly object _engineLock = new();
@@ -27,6 +43,7 @@ public sealed class AudioEngineService : IAudioEngineService
     private ISampleProvider? _microphoneSampleProvider;
     private WasapiOut? _output;
     private WasapiOut? _speakerOutput;
+    private byte[] _microphoneTrimBuffer = [];
 
     private float _microphoneVolume = 1.0f;
     private float _soundboardVolume = 1.0f;
@@ -77,29 +94,15 @@ public sealed class AudioEngineService : IAudioEngineService
 
             try
             {
-                _microphoneCapture = new WasapiCapture(microphoneDevice, true, CaptureLatencyMilliseconds)
-                {
-                    ShareMode = AudioClientShareMode.Shared
-                };
-                _microphoneCapture.DataAvailable += OnMicrophoneDataAvailable;
-                _microphoneCapture.RecordingStopped += OnMicrophoneRecordingStopped;
-
-                _microphoneBuffer = new BufferedWaveProvider(_microphoneCapture.WaveFormat)
-                {
-                    BufferDuration = TimeSpan.FromMilliseconds(MicrophoneBufferMilliseconds),
-                    DiscardOnBufferOverflow = true,
-                    ReadFully = false
-                };
-
-                _microphoneSampleProvider = AudioSampleProviderUtilities
-                    .ConvertToInternalMixFormat(_microphoneBuffer.ToSampleProvider());
+                var captureLatencyMilliseconds = StartMicrophoneCapture(microphoneDevice);
 
                 var waveProvider = BuildOutputWaveProvider(outputDevice, "mixed output");
 
-                _output = CreateOutput(outputDevice, waveProvider, "mixed output");
+                _output = CreateOutput(outputDevice, waveProvider, "mixed output", out var mixedOutputLatencyMilliseconds);
                 _output.PlaybackStopped += OnOutputPlaybackStopped;
                 _output.Play();
 
+                int? speakerOutputLatencyMilliseconds = null;
                 var shouldStartSpeakerMonitor =
                     speakerMonitorEnabled &&
                     speakerDevice is not null &&
@@ -113,7 +116,12 @@ public sealed class AudioEngineService : IAudioEngineService
                         "speaker monitor");
                     try
                     {
-                        _speakerOutput = CreateOutput(speakerDevice!, speakerWaveProvider, "speaker monitor");
+                        _speakerOutput = CreateOutput(
+                            speakerDevice!,
+                            speakerWaveProvider,
+                            "speaker monitor",
+                            out var monitorLatencyMilliseconds);
+                        speakerOutputLatencyMilliseconds = monitorLatencyMilliseconds;
                         _speakerOutput.PlaybackStopped += OnSpeakerOutputPlaybackStopped;
                         _speakerOutput.Play();
                         _logService.Info(DescribeOutputSettings("Speaker monitor", speakerDevice!, speakerWaveProvider));
@@ -135,12 +143,19 @@ public sealed class AudioEngineService : IAudioEngineService
                     _logService.Info("Speaker monitor playback is turned off.");
                 }
 
-                _microphoneCapture.StartRecording();
+                _microphoneBuffer?.ClearBuffer();
                 _logService.Info($"Internal mix format: {InternalSampleRate} Hz, 32-bit float, {InternalChannels} channels.");
-                _logService.Info(DescribeMicrophoneSettings(microphoneDevice, _microphoneCapture, _microphoneBuffer));
+                _logService.Info(DescribeMicrophoneSettings(
+                    microphoneDevice,
+                    _microphoneCapture!,
+                    _microphoneBuffer!,
+                    captureLatencyMilliseconds));
                 _logService.Info(DescribeOutputSettings("Mixed output", outputDevice, waveProvider));
                 _logService.Info(
-                    $"Latency profile: capture {CaptureLatencyMilliseconds} ms, mic buffer {MicrophoneBufferMilliseconds} ms, render {EventDrivenRenderLatencyMilliseconds}/{PollingRenderLatencyMilliseconds} ms.");
+                    DescribeLatencyProfile(
+                        captureLatencyMilliseconds,
+                        mixedOutputLatencyMilliseconds,
+                        speakerOutputLatencyMilliseconds));
                 SetStatus(
                     _speakerOutput is not null
                         ? $"Running: {microphoneDevice.FriendlyName} -> {outputDevice.FriendlyName} | Clips -> {speakerDevice!.FriendlyName}"
@@ -202,7 +217,12 @@ public sealed class AudioEngineService : IAudioEngineService
     {
         _microphoneVolume = Math.Clamp(microphoneVolume, 0.0f, 1.0f);
         _soundboardVolume = Math.Clamp(soundboardVolume, 0.0f, 1.0f);
-        Interlocked.Exchange(ref _microphoneMuted, microphoneMuted ? 1 : 0);
+        var muteValue = microphoneMuted ? 1 : 0;
+        var previousMuteValue = Interlocked.Exchange(ref _microphoneMuted, muteValue);
+        if (muteValue == 1 && previousMuteValue == 0)
+        {
+            _microphoneBuffer?.ClearBuffer();
+        }
     }
 
     public void Dispose()
@@ -250,29 +270,102 @@ public sealed class AudioEngineService : IAudioEngineService
         return devices[0];
     }
 
-    private WasapiOut CreateOutput(MMDevice outputDevice, IWaveProvider waveProvider, string outputRole)
+    private int StartMicrophoneCapture(MMDevice microphoneDevice)
+    {
+        Exception? lastException = null;
+
+        foreach (var latencyMilliseconds in CaptureLatencyCandidates.Distinct())
+        {
+            try
+            {
+                var capture = new WasapiCapture(microphoneDevice, true, latencyMilliseconds)
+                {
+                    ShareMode = AudioClientShareMode.Shared
+                };
+
+                var microphoneBuffer = new BufferedWaveProvider(capture.WaveFormat)
+                {
+                    BufferDuration = TimeSpan.FromMilliseconds(MicrophoneBufferMilliseconds),
+                    DiscardOnBufferOverflow = true,
+                    ReadFully = false
+                };
+
+                _microphoneCapture = capture;
+                _microphoneBuffer = microphoneBuffer;
+                var sampleProvider = AudioSampleProviderUtilities
+                    .ConvertToInternalMixFormat(microphoneBuffer.ToSampleProvider());
+
+                if (capture.WaveFormat.SampleRate != InternalSampleRate)
+                {
+                    _logService.Info(
+                        $"Microphone capture format is {capture.WaveFormat.SampleRate} Hz, so realtime resampling to {InternalSampleRate} Hz is active. Set the Windows microphone format to {InternalSampleRate} Hz when possible to reduce capture-to-render work.");
+                }
+
+                capture.DataAvailable += OnMicrophoneDataAvailable;
+                capture.RecordingStopped += OnMicrophoneRecordingStopped;
+
+                _microphoneSampleProvider = sampleProvider;
+
+                capture.StartRecording();
+                _logService.Info(
+                    $"WASAPI microphone capture initialized on '{microphoneDevice.FriendlyName}' with requested latency {latencyMilliseconds} ms.");
+                return latencyMilliseconds;
+            }
+            catch (Exception exception)
+            {
+                lastException = exception;
+                _logService.Warning(
+                    $"WASAPI microphone capture failed on '{microphoneDevice.FriendlyName}' with requested latency {latencyMilliseconds} ms. {exception.Message}");
+                StopMicrophoneCapture(suppressStoppedEvent: true);
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Failed to initialize microphone capture on '{microphoneDevice.FriendlyName}'.",
+            lastException);
+    }
+
+    private WasapiOut CreateOutput(
+        MMDevice outputDevice,
+        IWaveProvider waveProvider,
+        string outputRole,
+        out int requestedLatencyMilliseconds)
     {
         WasapiOut? output = null;
 
+        foreach (var latencyMilliseconds in EventDrivenRenderLatencyCandidates.Distinct())
+        {
+            try
+            {
+                output = new WasapiOut(outputDevice, AudioClientShareMode.Shared, true, latencyMilliseconds);
+                output.Init(waveProvider);
+                requestedLatencyMilliseconds = latencyMilliseconds;
+                _logService.Info(
+                    $"Event-driven WASAPI {outputRole} initialized on '{outputDevice.FriendlyName}' with requested latency {latencyMilliseconds} ms.");
+                return output;
+            }
+            catch (Exception exception)
+            {
+                output?.Dispose();
+                output = null;
+                _logService.Warning(
+                    $"Event-driven WASAPI {outputRole} failed on '{outputDevice.FriendlyName}' with requested latency {latencyMilliseconds} ms. {exception.Message}");
+            }
+        }
+
         try
         {
-            output = new WasapiOut(outputDevice, AudioClientShareMode.Shared, true, EventDrivenRenderLatencyMilliseconds);
-            output.Init(waveProvider);
-            _logService.Info(
-                $"Event-driven WASAPI {outputRole} initialized on '{outputDevice.FriendlyName}' with requested latency {EventDrivenRenderLatencyMilliseconds} ms.");
-            return output;
-        }
-        catch (Exception exception)
-        {
-            output?.Dispose();
-            _logService.Warning(
-                $"Event-driven WASAPI {outputRole} failed on '{outputDevice.FriendlyName}'. Falling back to polling mode. {exception.Message}");
-
             output = new WasapiOut(outputDevice, AudioClientShareMode.Shared, false, PollingRenderLatencyMilliseconds);
             output.Init(waveProvider);
+            requestedLatencyMilliseconds = PollingRenderLatencyMilliseconds;
             _logService.Info(
                 $"Polling WASAPI {outputRole} initialized on '{outputDevice.FriendlyName}' with requested latency {PollingRenderLatencyMilliseconds} ms.");
             return output;
+        }
+        catch
+        {
+            output?.Dispose();
+            throw;
         }
     }
 
@@ -291,6 +384,8 @@ public sealed class AudioEngineService : IAudioEngineService
 
         if (targetFormat.SampleRate != InternalSampleRate)
         {
+            _logService.Info(
+                $"{outputRole} device mix format is {targetFormat.SampleRate} Hz, so realtime resampling from {InternalSampleRate} Hz is active. Set the Windows device format to {InternalSampleRate} Hz when possible to reduce callback work.");
             sampleProvider = new WdlResamplingSampleProvider(sampleProvider, targetFormat.SampleRate);
         }
 
@@ -301,10 +396,11 @@ public sealed class AudioEngineService : IAudioEngineService
     private static string DescribeMicrophoneSettings(
         MMDevice microphoneDevice,
         WasapiCapture microphoneCapture,
-        BufferedWaveProvider microphoneBuffer)
+        BufferedWaveProvider microphoneBuffer,
+        int requestedLatencyMilliseconds)
     {
         return
-            $"Microphone capture settings: device '{microphoneDevice.FriendlyName}', format {DescribeWaveFormat(microphoneCapture.WaveFormat)}, requested latency {CaptureLatencyMilliseconds} ms, buffer {microphoneBuffer.BufferLength} bytes/{MicrophoneBufferMilliseconds} ms.";
+            $"Microphone capture settings: device '{microphoneDevice.FriendlyName}', format {DescribeWaveFormat(microphoneCapture.WaveFormat)}, device periods {DescribeDevicePeriods(microphoneDevice.AudioClient)}, requested latency {requestedLatencyMilliseconds} ms, buffer {microphoneBuffer.BufferLength} bytes/{MicrophoneBufferMilliseconds} ms, trim threshold {MicrophoneTrimThresholdMilliseconds} ms, trim target {TargetMicrophoneBufferedMilliseconds} ms.";
     }
 
     private static string DescribeOutputSettings(
@@ -313,13 +409,37 @@ public sealed class AudioEngineService : IAudioEngineService
         DeviceOutputWaveProvider waveProvider)
     {
         return
-            $"{label} render settings: device '{outputDevice.FriendlyName}', device mix {DescribeWaveFormat(outputDevice.AudioClient.MixFormat)}, app output {DescribeWaveFormat(waveProvider.WaveFormat)}, encoding {waveProvider.EncodingDescription}.";
+            $"{label} render settings: device '{outputDevice.FriendlyName}', device mix {DescribeWaveFormat(outputDevice.AudioClient.MixFormat)}, device periods {DescribeDevicePeriods(outputDevice.AudioClient)}, app output {DescribeWaveFormat(waveProvider.WaveFormat)}, encoding {waveProvider.EncodingDescription}.";
     }
 
     private static string DescribeWaveFormat(WaveFormat waveFormat)
     {
         return
             $"{waveFormat.SampleRate} Hz, {waveFormat.BitsPerSample}-bit {waveFormat.Encoding}, {waveFormat.Channels} channel(s), block align {waveFormat.BlockAlign}, avg {waveFormat.AverageBytesPerSecond} B/s";
+    }
+
+    private static string DescribeDevicePeriods(AudioClient audioClient)
+    {
+        return
+            $"default {FormatReferenceTimeMilliseconds(audioClient.DefaultDevicePeriod)}, minimum {FormatReferenceTimeMilliseconds(audioClient.MinimumDevicePeriod)}";
+    }
+
+    private static string FormatReferenceTimeMilliseconds(long referenceTime)
+    {
+        return $"{referenceTime / 10_000.0:F2} ms";
+    }
+
+    private static string DescribeLatencyProfile(
+        int captureLatencyMilliseconds,
+        int mixedOutputLatencyMilliseconds,
+        int? speakerOutputLatencyMilliseconds)
+    {
+        var speakerLatency = speakerOutputLatencyMilliseconds.HasValue
+            ? $", speaker render {speakerOutputLatencyMilliseconds.Value} ms"
+            : string.Empty;
+
+        return
+            $"Latency profile: capture {captureLatencyMilliseconds} ms, mic buffer {MicrophoneBufferMilliseconds} ms, mic trim threshold {MicrophoneTrimThresholdMilliseconds} ms, mic trim target {TargetMicrophoneBufferedMilliseconds} ms, mixed render {mixedOutputLatencyMilliseconds} ms{speakerLatency}.";
     }
 
     private void StopInternal(bool updateStatus)
@@ -347,17 +467,7 @@ public sealed class AudioEngineService : IAudioEngineService
                 _speakerOutput = null;
             }
 
-            if (_microphoneCapture is not null)
-            {
-                _microphoneCapture.DataAvailable -= OnMicrophoneDataAvailable;
-                _microphoneCapture.RecordingStopped -= OnMicrophoneRecordingStopped;
-                TryExecute(_microphoneCapture.StopRecording);
-                _microphoneCapture.Dispose();
-                _microphoneCapture = null;
-            }
-
-            _microphoneBuffer = null;
-            _microphoneSampleProvider = null;
+            StopMicrophoneCapture();
 
             lock (_clipCommandLock)
             {
@@ -376,6 +486,36 @@ public sealed class AudioEngineService : IAudioEngineService
         }
     }
 
+    private void StopMicrophoneCapture(bool suppressStoppedEvent = false)
+    {
+        var shouldRestoreStoppingFlag =
+            suppressStoppedEvent &&
+            Interlocked.CompareExchange(ref _isStopping, 1, 0) == 0;
+
+        try
+        {
+            if (_microphoneCapture is not null)
+            {
+                _microphoneCapture.DataAvailable -= OnMicrophoneDataAvailable;
+                _microphoneCapture.RecordingStopped -= OnMicrophoneRecordingStopped;
+                TryExecute(_microphoneCapture.StopRecording);
+                _microphoneCapture.Dispose();
+                _microphoneCapture = null;
+            }
+
+            _microphoneBuffer = null;
+            _microphoneSampleProvider = null;
+            _microphoneTrimBuffer = [];
+        }
+        finally
+        {
+            if (shouldRestoreStoppingFlag)
+            {
+                Interlocked.Exchange(ref _isStopping, 0);
+            }
+        }
+    }
+
     private void OnMicrophoneDataAvailable(object? sender, WaveInEventArgs eventArgs)
     {
         var microphoneBuffer = _microphoneBuffer;
@@ -386,6 +526,14 @@ public sealed class AudioEngineService : IAudioEngineService
 
         try
         {
+            if (IsMicrophoneMuted())
+            {
+                microphoneBuffer.ClearBuffer();
+                return;
+            }
+
+            TrimMicrophoneBacklog(microphoneBuffer);
+
             var availableBytes = Math.Max(0, microphoneBuffer.BufferLength - microphoneBuffer.BufferedBytes);
             if (eventArgs.BytesRecorded > availableBytes)
             {
@@ -399,6 +547,89 @@ public sealed class AudioEngineService : IAudioEngineService
         {
             _microphoneOverflowLogger.Warning($"Microphone buffer overflowed or failed. {exception.Message}");
         }
+    }
+
+    private void TrimMicrophoneBacklog(BufferedWaveProvider microphoneBuffer)
+    {
+        var trimThresholdBytes = GetAlignedByteCount(
+            microphoneBuffer.WaveFormat,
+            MicrophoneTrimThresholdMilliseconds);
+        if (microphoneBuffer.BufferedBytes <= trimThresholdBytes)
+        {
+            return;
+        }
+
+        var targetBytes = GetAlignedByteCount(
+            microphoneBuffer.WaveFormat,
+            TargetMicrophoneBufferedMilliseconds);
+        var bytesToDiscard = AlignByteCount(
+            microphoneBuffer.BufferedBytes - targetBytes,
+            microphoneBuffer.WaveFormat.BlockAlign);
+
+        if (bytesToDiscard <= 0)
+        {
+            return;
+        }
+
+        EnsureMicrophoneTrimBuffer(Math.Min(bytesToDiscard, microphoneBuffer.BufferLength));
+
+        var remainingBytes = bytesToDiscard;
+        while (remainingBytes > 0)
+        {
+            var chunkBytes = Math.Min(remainingBytes, _microphoneTrimBuffer.Length);
+            var bytesRead = microphoneBuffer.Read(_microphoneTrimBuffer, 0, chunkBytes);
+            if (bytesRead <= 0)
+            {
+                break;
+            }
+
+            remainingBytes -= bytesRead;
+        }
+
+        var discardedBytes = bytesToDiscard - remainingBytes;
+        if (discardedBytes > 0)
+        {
+            _microphoneOverflowLogger.Warning(
+                $"Dropped {FormatBufferDuration(microphoneBuffer.WaveFormat, discardedBytes)} of stale queued microphone audio to keep monitoring latency bounded.");
+        }
+    }
+
+    private bool IsMicrophoneMuted()
+    {
+        return Interlocked.CompareExchange(ref _microphoneMuted, 0, 0) == 1;
+    }
+
+    private void EnsureMicrophoneTrimBuffer(int minimumLength)
+    {
+        if (_microphoneTrimBuffer.Length < minimumLength)
+        {
+            _microphoneTrimBuffer = new byte[minimumLength];
+        }
+    }
+
+    private static int GetAlignedByteCount(WaveFormat waveFormat, int milliseconds)
+    {
+        var byteCount = (int)Math.Ceiling(waveFormat.AverageBytesPerSecond * milliseconds / 1000.0);
+        return AlignByteCount(byteCount, waveFormat.BlockAlign);
+    }
+
+    private static int AlignByteCount(int byteCount, int blockAlign)
+    {
+        if (byteCount <= 0 || blockAlign <= 1)
+        {
+            return Math.Max(0, byteCount);
+        }
+
+        return byteCount - (byteCount % blockAlign);
+    }
+
+    private static string FormatBufferDuration(WaveFormat waveFormat, int byteCount)
+    {
+        var milliseconds = waveFormat.AverageBytesPerSecond > 0
+            ? byteCount * 1000.0 / waveFormat.AverageBytesPerSecond
+            : 0.0;
+
+        return $"{milliseconds:F1} ms";
     }
 
     private void OnMicrophoneRecordingStopped(object? sender, StoppedEventArgs eventArgs)
@@ -468,7 +699,7 @@ public sealed class AudioEngineService : IAudioEngineService
     private void MixMicrophone(float[] buffer, int offset, int count, AudioRenderScratch scratch)
     {
         var microphoneSampleProvider = _microphoneSampleProvider;
-        if (microphoneSampleProvider is null || Interlocked.CompareExchange(ref _microphoneMuted, 0, 0) == 1)
+        if (microphoneSampleProvider is null || IsMicrophoneMuted())
         {
             return;
         }

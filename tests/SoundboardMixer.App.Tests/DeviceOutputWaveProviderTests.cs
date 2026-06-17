@@ -42,4 +42,18 @@ public sealed class DeviceOutputWaveProviderTests
             Assert.AreEqual(samples[index], BitConverter.ToSingle(output, index * sizeof(float)), 0.0001f);
         }
     }
+
+    [TestMethod]
+    public void Read_ClearsUnreadTail_WhenSourceUnderruns()
+    {
+        var source = new ArraySampleProvider([0.5f]);
+        var provider = new DeviceOutputWaveProvider(source, WaveFormat.CreateIeeeFloatWaveFormat(48_000, 1));
+        var output = Enumerable.Repeat((byte)0xFF, 2 * sizeof(float)).ToArray();
+
+        var bytesRead = provider.Read(output, 0, output.Length);
+
+        Assert.AreEqual(output.Length, bytesRead);
+        Assert.AreEqual(0.5f, BitConverter.ToSingle(output, 0), 0.0001f);
+        Assert.AreEqual(0.0f, BitConverter.ToSingle(output, sizeof(float)), 0.0001f);
+    }
 }
