@@ -33,6 +33,46 @@ public sealed class HotkeyGestureTests
         Assert.AreEqual(0x0008u, gesture.GetNativeModifiers());
     }
 
+    [TestMethod]
+    public void TryParse_NormalizesTildeAlias()
+    {
+        var parsed = HotkeyGesture.TryParse("ctrl+tilde", out var gesture, out var error);
+
+        Assert.IsTrue(parsed, error);
+        Assert.IsNotNull(gesture);
+        Assert.AreEqual(ModifierKeys.Control, gesture.Modifiers);
+        Assert.AreEqual(Key.Oem3, gesture.Key);
+        Assert.AreEqual("Ctrl+Tilde", gesture.ToString());
+    }
+
+    [TestMethod]
+    public void TryCreate_RejectsModifierOnlyKey()
+    {
+        var parsed = HotkeyGesture.TryCreate(ModifierKeys.Control, Key.LeftShift, out var gesture, out var error);
+
+        Assert.IsFalse(parsed);
+        Assert.IsNull(gesture);
+        Assert.AreEqual("A non-modifier key is required", error);
+    }
+
+    [TestMethod]
+    public void CaptureSession_KeepsModifiersAndReplacesNonModifierKey()
+    {
+        var session = new HotkeyCaptureSession();
+
+        var capturedModifierOnly = session.ApplyKey(Key.LeftCtrl, ModifierKeys.Control);
+        var modifierOnlyPreview = session.PreviewText;
+        var capturedFirstKey = session.ApplyKey(Key.D1, ModifierKeys.Control);
+        var capturedReplacementKey = session.ApplyKey(Key.D2, ModifierKeys.None);
+
+        Assert.IsFalse(capturedModifierOnly);
+        Assert.AreEqual("Ctrl+...", modifierOnlyPreview);
+        Assert.IsTrue(capturedFirstKey);
+        Assert.IsTrue(capturedReplacementKey);
+        Assert.AreEqual("Ctrl+2", session.CapturedHotkeyText);
+        Assert.AreEqual("Ctrl+2", session.PreviewText);
+    }
+
     [DataTestMethod]
     [DataRow("   ", "Hotkey is empty")]
     [DataRow("Ctrl+Ctrl+A", "Duplicate modifier 'Ctrl'")]

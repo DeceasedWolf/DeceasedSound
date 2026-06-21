@@ -6,7 +6,7 @@ internal sealed class HotkeyGesture
 {
     private HotkeyGesture(ModifierKeys modifiers, Key key)
     {
-        Modifiers = modifiers;
+        Modifiers = NormalizeModifiers(modifiers);
         Key = key;
     }
 
@@ -65,6 +65,12 @@ internal sealed class HotkeyGesture
                 return false;
             }
 
+            if (TryGetModifier(parsedKey, out _))
+            {
+                error = "A non-modifier key is required";
+                return false;
+            }
+
             key = parsedKey;
         }
 
@@ -74,7 +80,30 @@ internal sealed class HotkeyGesture
             return false;
         }
 
-        gesture = new HotkeyGesture(modifiers, key.Value);
+        return TryCreate(modifiers, key.Value, out gesture, out error);
+    }
+
+    public static bool TryCreate(ModifierKeys modifiers, Key key, out HotkeyGesture? gesture, out string error)
+    {
+        gesture = null;
+        error = string.Empty;
+
+        modifiers = NormalizeModifiers(modifiers);
+        key = NormalizeKey(key);
+
+        if (key == Key.None || TryGetModifier(key, out _))
+        {
+            error = "A non-modifier key is required";
+            return false;
+        }
+
+        if (KeyInterop.VirtualKeyFromKey(key) == 0)
+        {
+            error = $"Unsupported key '{key}'";
+            return false;
+        }
+
+        gesture = new HotkeyGesture(modifiers, key);
         return true;
     }
 
@@ -109,30 +138,65 @@ internal sealed class HotkeyGesture
 
     public override string ToString()
     {
-        var parts = new List<string>(5);
+        var parts = GetModifierDisplayParts(Modifiers);
+        parts.Add(KeyToDisplayString(Key));
+        return string.Join("+", parts);
+    }
 
-        if (Modifiers.HasFlag(ModifierKeys.Control))
+    public static bool TryGetModifier(Key key, out ModifierKeys modifier)
+    {
+        modifier = NormalizeKey(key) switch
+        {
+            Key.LeftCtrl or Key.RightCtrl => ModifierKeys.Control,
+            Key.LeftAlt or Key.RightAlt => ModifierKeys.Alt,
+            Key.LeftShift or Key.RightShift => ModifierKeys.Shift,
+            Key.LWin or Key.RWin => ModifierKeys.Windows,
+            _ => ModifierKeys.None
+        };
+
+        return modifier != ModifierKeys.None;
+    }
+
+    public static ModifierKeys NormalizeModifiers(ModifierKeys modifiers)
+    {
+        return modifiers & (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Shift | ModifierKeys.Windows);
+    }
+
+    public static Key NormalizeKey(Key key)
+    {
+        return key;
+    }
+
+    public static string ModifiersToDisplayString(ModifierKeys modifiers)
+    {
+        return string.Join("+", GetModifierDisplayParts(NormalizeModifiers(modifiers)));
+    }
+
+    private static List<string> GetModifierDisplayParts(ModifierKeys modifiers)
+    {
+        var parts = new List<string>(4);
+
+        if (modifiers.HasFlag(ModifierKeys.Control))
         {
             parts.Add("Ctrl");
         }
 
-        if (Modifiers.HasFlag(ModifierKeys.Alt))
+        if (modifiers.HasFlag(ModifierKeys.Alt))
         {
             parts.Add("Alt");
         }
 
-        if (Modifiers.HasFlag(ModifierKeys.Shift))
+        if (modifiers.HasFlag(ModifierKeys.Shift))
         {
             parts.Add("Shift");
         }
 
-        if (Modifiers.HasFlag(ModifierKeys.Windows))
+        if (modifiers.HasFlag(ModifierKeys.Windows))
         {
             parts.Add("Win");
         }
 
-        parts.Add(KeyToDisplayString(Key));
-        return string.Join("+", parts);
+        return parts;
     }
 
     private static bool TryParseModifier(string token, out ModifierKeys modifier)
@@ -171,10 +235,38 @@ internal sealed class HotkeyGesture
             ["PageDown"] = nameof(Key.PageDown),
             ["Del"] = nameof(Key.Delete),
             ["Ins"] = nameof(Key.Insert),
+            ["Enter"] = nameof(Key.Return),
+            ["Backspace"] = nameof(Key.Back),
             ["Esc"] = nameof(Key.Escape),
             ["Space"] = nameof(Key.Space),
+            ["Tab"] = nameof(Key.Tab),
             ["Plus"] = nameof(Key.OemPlus),
             ["Minus"] = nameof(Key.OemMinus),
+            ["Tilde"] = nameof(Key.Oem3),
+            ["Backtick"] = nameof(Key.Oem3),
+            ["`"] = nameof(Key.Oem3),
+            ["~"] = nameof(Key.Oem3),
+            ["Comma"] = nameof(Key.OemComma),
+            [","] = nameof(Key.OemComma),
+            ["Period"] = nameof(Key.OemPeriod),
+            ["."] = nameof(Key.OemPeriod),
+            ["Slash"] = nameof(Key.Oem2),
+            ["/"] = nameof(Key.Oem2),
+            ["Question"] = nameof(Key.Oem2),
+            ["Semicolon"] = nameof(Key.Oem1),
+            [";"] = nameof(Key.Oem1),
+            ["Quote"] = nameof(Key.Oem7),
+            ["Apostrophe"] = nameof(Key.Oem7),
+            ["'"] = nameof(Key.Oem7),
+            ["LBracket"] = nameof(Key.Oem4),
+            ["OpenBracket"] = nameof(Key.Oem4),
+            ["["] = nameof(Key.Oem4),
+            ["RBracket"] = nameof(Key.Oem6),
+            ["CloseBracket"] = nameof(Key.Oem6),
+            ["]"] = nameof(Key.Oem6),
+            ["Backslash"] = nameof(Key.Oem5),
+            ["\\"] = nameof(Key.Oem5),
+            ["Pipe"] = nameof(Key.Oem5),
             ["Num0"] = nameof(Key.NumPad0),
             ["Num1"] = nameof(Key.NumPad1),
             ["Num2"] = nameof(Key.NumPad2),
@@ -215,9 +307,21 @@ internal sealed class HotkeyGesture
             Key.PageDown => "PgDn",
             Key.Delete => "Del",
             Key.Insert => "Ins",
+            Key.Return => "Enter",
+            Key.Back => "Backspace",
             Key.Escape => "Esc",
+            Key.Tab => "Tab",
             Key.OemPlus => "Plus",
             Key.OemMinus => "Minus",
+            Key.Oem3 => "Tilde",
+            Key.OemComma => "Comma",
+            Key.OemPeriod => "Period",
+            Key.Oem2 => "Slash",
+            Key.Oem1 => "Semicolon",
+            Key.Oem7 => "Quote",
+            Key.Oem4 => "LBracket",
+            Key.Oem6 => "RBracket",
+            Key.Oem5 => "Backslash",
             _ => name
         };
     }

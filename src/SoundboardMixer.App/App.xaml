@@ -1,6 +1,7 @@
 <Application x:Class="SoundboardMixer.App.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:SoundboardMixer.App.Controls"
              ShutdownMode="OnMainWindowClose">
     <Application.Resources>
         <SolidColorBrush x:Key="Brush.Rosewater"
@@ -836,6 +837,38 @@
                     Value="{StaticResource Brush.Rosewater}" />
             <Setter Property="SelectionBrush"
                     Value="{StaticResource Brush.Surface2}" />
+        </Style>
+
+        <Style x:Key="HotkeyCaptureBoxStyle"
+               TargetType="{x:Type controls:HotkeyCaptureBox}"
+               BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="MinHeight"
+                    Value="30" />
+            <Setter Property="Padding"
+                    Value="8,4" />
+            <Setter Property="HorizontalContentAlignment"
+                    Value="Stretch" />
+            <Setter Property="FontWeight"
+                    Value="Normal" />
+            <Setter Property="ToolTip"
+                    Value="Click to listen. Click again while listening to clear." />
+            <Setter Property="ContentTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsCapturing"
+                         Value="True">
+                    <Setter Property="BorderBrush"
+                            Value="{StaticResource Brush.Blue}" />
+                    <Setter Property="Foreground"
+                            Value="{StaticResource Brush.Rosewater}" />
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style x:Key="SliderTrackRepeatButtonStyle"
