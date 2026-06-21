@@ -18,6 +18,7 @@ public sealed class SettingsServiceTests
               "SoundboardVolume": -1.0,
               "AutoStartOnWindowsStart": true,
               "MinimizeToSystemTrayOnClose": true,
+              "StopAllHotkeyText": "  Ctrl+Shift+Esc  ",
               "Window": {
                 "Width": 0,
                 "Height": -25
@@ -49,6 +50,7 @@ public sealed class SettingsServiceTests
         Assert.AreEqual(0.0f, settings.SoundboardVolume, 0.0001f);
         Assert.IsTrue(settings.AutoStartOnWindowsStart);
         Assert.IsTrue(settings.MinimizeToSystemTrayOnClose);
+        Assert.AreEqual("Ctrl+Shift+Esc", settings.StopAllHotkeyText);
         Assert.AreEqual(1180, settings.Window.Width);
         Assert.AreEqual(760, settings.Window.Height);
 

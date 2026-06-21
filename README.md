@@ -39,6 +39,14 @@ dotnet build SoundboardMixer.sln
 dotnet test SoundboardMixer.sln
 ```
 
+## Publish
+
+```powershell
+dotnet publish src\SoundboardMixer.App\SoundboardMixer.App.csproj -c Release -f net8.0-windows -r win-x64 -p:PublishSingleFile=true -p:SelfContained=true --output .\publish
+```
+
+For WPF single-file publishing, the project enables native-library extraction so the bundled executable can load WPF's native components at startup.
+
 ## Using The App
 
 1. Launch the app.
@@ -53,12 +61,13 @@ dotnet test SoundboardMixer.sln
 9. Open `Dashboard` when you want more space to search and trigger many sounds by clicking tiles.
 10. Click an active Dashboard sound tile again to stop that sound.
 11. Adjust `Microphone Volume` and `Soundboard Volume` as needed.
-12. Open `Settings` if you want DeceasedSound to start with Windows or hide to the system tray when closed.
+12. Open `Settings` if you want DeceasedSound to start with Windows, hide to the system tray when closed, or set a Stop All shortcut.
 13. In Discord, set the microphone input device to `CABLE Output`.
 
 ## Hotkeys
 
 - Enter hotkeys in the `Hotkey` column using formats such as `Ctrl+Alt+1`, `Shift+F8`, or `Alt+Num1`.
+- Set the Stop All shortcut from `Settings` using the same format.
 - If a hotkey cannot be registered because another app already uses it, the `Hotkey Status` column shows the conflict.
 - Hotkeys are optional. Leave the field blank to disable one.
 

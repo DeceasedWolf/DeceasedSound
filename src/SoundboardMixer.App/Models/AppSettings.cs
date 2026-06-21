@@ -23,6 +23,8 @@ public sealed class AppSettings
 
     public bool MinimizeToSystemTrayOnClose { get; set; }
 
+    public string? StopAllHotkeyText { get; set; }
+
     public List<ClipSettings> Clips { get; set; } = [];
 
     public WindowSettings Window { get; set; } = new();

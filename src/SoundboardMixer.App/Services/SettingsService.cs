@@ -88,6 +88,7 @@ public sealed class SettingsService : ISettingsService
         settings.Window ??= new WindowSettings();
         settings.MicrophoneVolume = Math.Clamp(settings.MicrophoneVolume, 0.0f, 3.0f);
         settings.SoundboardVolume = Math.Clamp(settings.SoundboardVolume, 0.0f, 1.0f);
+        settings.StopAllHotkeyText = string.IsNullOrWhiteSpace(settings.StopAllHotkeyText) ? null : settings.StopAllHotkeyText.Trim();
         settings.Window.Width = settings.Window.Width > 0 ? settings.Window.Width : 1180;
         settings.Window.Height = settings.Window.Height > 0 ? settings.Window.Height : 760;
 

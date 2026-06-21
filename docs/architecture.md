@@ -83,9 +83,9 @@ This keeps microphone capture, clip scheduling, mixing, and playback routing in 
 
 ### `GlobalHotkeyService`
 
-- Registers optional clip hotkeys with `RegisterHotKey`.
+- Registers optional clip and stop-all hotkeys with `RegisterHotKey`.
 - Tracks registration conflicts and reports them back to the UI.
-- Raises clip trigger events when a registered hotkey is pressed.
+- Raises trigger events when a registered hotkey is pressed.
 
 ### `LogService`
 
@@ -112,7 +112,7 @@ The WPF window uses a Catppuccin Mocha resource theme and is organized into comp
 - Dashboard:
   expanded searchable sound-tile view for quickly finding and clicking sounds without needing hotkeys.
 - Settings:
-  application preferences for Windows startup and close-to-system-tray behavior.
+  application preferences for Windows startup, close-to-system-tray behavior, and the stop-all shortcut.
 - Logs:
   collapsible in-app log output.
 

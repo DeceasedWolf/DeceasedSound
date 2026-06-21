@@ -52,10 +52,10 @@ internal sealed class GlobalHotkeyService : IGlobalHotkeyService
         }
 
         var registrationId = wParam.ToInt32();
-        if (_registeredHotkeys.TryGetValue(registrationId, out var clipId))
+        if (_registeredHotkeys.TryGetValue(registrationId, out var bindingId))
         {
             handled = true;
-            HotkeyPressed?.Invoke(this, clipId);
+            HotkeyPressed?.Invoke(this, bindingId);
             return true;
         }
 

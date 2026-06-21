@@ -16,6 +16,8 @@ namespace SoundboardMixer.App.ViewModels;
 
 internal sealed class MainWindowViewModel : ObservableObject
 {
+    private const string StopAllHotkeyId = "__stop_all__";
+
     private readonly AppSettings _settings;
     private readonly ISettingsService _settingsService;
     private readonly IFileDialogService _fileDialogService;
@@ -43,6 +45,8 @@ internal sealed class MainWindowViewModel : ObservableObject
     private bool _isSettingsOpen;
     private bool _isAutoStartOnWindowsStart;
     private bool _isMinimizeToSystemTrayOnClose;
+    private string? _stopAllHotkeyText;
+    private string _stopAllHotkeyStatus = string.Empty;
     private bool _isInitializing;
     private bool _isRefreshingDevices;
     private Task? _shutdownTask;
@@ -74,6 +78,7 @@ internal sealed class MainWindowViewModel : ObservableObject
         _isSpeakerMonitorEnabled = settings.IsSpeakerMonitorEnabled;
         _isAutoStartOnWindowsStart = settings.AutoStartOnWindowsStart;
         _isMinimizeToSystemTrayOnClose = settings.MinimizeToSystemTrayOnClose;
+        _stopAllHotkeyText = settings.StopAllHotkeyText;
         _clipBrowserViewSource = new CollectionViewSource { Source = Clips };
         _clipBrowserViewSource.Filter += OnClipBrowserFilter;
 
@@ -253,6 +258,26 @@ internal sealed class MainWindowViewModel : ObservableObject
                 ScheduleSave();
             }
         }
+    }
+
+    public string? StopAllHotkeyText
+    {
+        get => _stopAllHotkeyText;
+        set
+        {
+            var nextValue = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (SetProperty(ref _stopAllHotkeyText, nextValue))
+            {
+                ApplyHotkeyBindings();
+                ScheduleSave();
+            }
+        }
+    }
+
+    public string StopAllHotkeyStatus
+    {
+        get => _stopAllHotkeyStatus;
+        private set => SetProperty(ref _stopAllHotkeyStatus, value);
     }
 
     public double MicrophoneVolumePercent
@@ -708,13 +733,18 @@ internal sealed class MainWindowViewModel : ObservableObject
 
     private void ApplyHotkeyBindings()
     {
-        var statuses = _globalHotkeyService.UpdateBindings(Clips.Select(clip =>
-            new HotkeyBindingDefinition(clip.Id, clip.HotkeyText)));
+        var bindings = Clips
+            .Select(clip => new HotkeyBindingDefinition(clip.Id, clip.HotkeyText))
+            .Append(new HotkeyBindingDefinition(StopAllHotkeyId, StopAllHotkeyText));
+
+        var statuses = _globalHotkeyService.UpdateBindings(bindings);
 
         foreach (var clip in Clips)
         {
             clip.SetHotkeyStatus(statuses.TryGetValue(clip.Id, out var status) ? status : string.Empty);
         }
+
+        StopAllHotkeyStatus = statuses.TryGetValue(StopAllHotkeyId, out var stopAllStatus) ? stopAllStatus : string.Empty;
     }
 
     private void OnClipChanged(ClipItemViewModel clip, string propertyName)
@@ -852,6 +882,7 @@ internal sealed class MainWindowViewModel : ObservableObject
             IsMicrophoneMuted = IsMicrophoneMuted,
             AutoStartOnWindowsStart = IsAutoStartOnWindowsStart,
             MinimizeToSystemTrayOnClose = IsMinimizeToSystemTrayOnClose,
+            StopAllHotkeyText = string.IsNullOrWhiteSpace(StopAllHotkeyText) ? null : StopAllHotkeyText.Trim(),
             Clips = Clips.Select(clip => clip.ToSettings()).ToList(),
             Window = new WindowSettings
             {
@@ -875,6 +906,7 @@ internal sealed class MainWindowViewModel : ObservableObject
         _settings.IsMicrophoneMuted = snapshot.IsMicrophoneMuted;
         _settings.AutoStartOnWindowsStart = snapshot.AutoStartOnWindowsStart;
         _settings.MinimizeToSystemTrayOnClose = snapshot.MinimizeToSystemTrayOnClose;
+        _settings.StopAllHotkeyText = snapshot.StopAllHotkeyText;
         _settings.Clips = snapshot.Clips;
     }
 
@@ -918,16 +950,22 @@ internal sealed class MainWindowViewModel : ObservableObject
         DispatchToUi(() => EngineStatus = status, "Failed to update audio status.");
     }
 
-    private void OnHotkeyPressed(object? sender, string clipId)
+    private void OnHotkeyPressed(object? sender, string bindingId)
     {
         DispatchToUiAsync(async () =>
         {
-            var clip = Clips.FirstOrDefault(candidate => candidate.Id == clipId);
+            if (string.Equals(bindingId, StopAllHotkeyId, StringComparison.Ordinal))
+            {
+                StopAllClips();
+                return;
+            }
+
+            var clip = Clips.FirstOrDefault(candidate => candidate.Id == bindingId);
             if (clip is not null)
             {
                 await PlayClipAsync(clip);
             }
-        }, $"Failed to play hotkey clip '{clipId}'.");
+        }, $"Failed to handle hotkey '{bindingId}'.");
     }
 
     private void OnLogEntryLogged(object? sender, LogEntry entry)

@@ -503,6 +503,30 @@
                         <CheckBox Content="Minimize to System Tray when clicking X"
                                   IsChecked="{Binding IsMinimizeToSystemTrayOnClose}" />
                     </Border>
+
+                    <Border Padding="0,16,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="220" />
+                                <ColumnDefinition Width="220" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       VerticalAlignment="Center"
+                                       Style="{StaticResource FieldLabelTextStyle}"
+                                       Text="Stop All Shortcut" />
+
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding StopAllHotkeyText, UpdateSourceTrigger=LostFocus, TargetNullValue=''}" />
+
+                            <TextBlock Grid.Column="2"
+                                       Margin="12,0,0,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource Brush.Subtext0}"
+                                       Text="{Binding StopAllHotkeyStatus}" />
+                        </Grid>
+                    </Border>
                 </StackPanel>
             </Grid>
         </Border>
